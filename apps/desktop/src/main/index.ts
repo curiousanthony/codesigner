@@ -90,7 +90,22 @@ function registerHandlers() {
 	handle('project:routes', (worktree) => scanRoutes(worktree));
 	handle('project:reveal', (path) => revealPath(path));
 	handle('project:open-in-editor', (file, line, column) => openInEditor(file, line, column));
-	handle('canvas:ensure-isolation', (worktree) => ensureIsolationRoute(worktree));
+	handle('canvas:ensure-isolation', async (worktree, serverUrl) => {
+		const path = ensureIsolationRoute(worktree);
+		// A route created a moment ago 404s until the dev server registers it.
+		if (serverUrl && /^http:\/\/(localhost|127\.0\.0\.1):\d+\/?$/.test(serverUrl)) {
+			const url = new URL(path, serverUrl).toString();
+			for (let i = 0; i < 40; i++) {
+				const status = await previewSession()
+					.fetch(url, { redirect: 'manual' })
+					.then((r) => r.status)
+					.catch(() => 0);
+				if (status !== 404 && status !== 0) break;
+				await new Promise((r) => setTimeout(r, 200));
+			}
+		}
+		return path;
+	});
 	handle('canvas:force-states', (id, rules) => forceStates(id, rules));
 
 	handle('branch:list', (root) => listBranches(root));

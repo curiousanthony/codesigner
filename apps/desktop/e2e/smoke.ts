@@ -207,6 +207,65 @@ await page.waitForFunction(() => Array.from(document.querySelectorAll('webview')
 log('slug route opened in all frames:', true);
 await shot('10-slug-route');
 
+// --- Framer parity checks (layers ↔ canvas, breakpoints, code panel, component canvas)
+await page.evaluate(() => (window as any).__editor.goTo('/'));
+await page.waitForTimeout(2500);
+const parity = await page.evaluate(async () => {
+	const e = (window as any).__editor;
+	const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	const out: Record<string, unknown> = {};
+	// Every breakpoint has its own layer tree.
+	out.trees = Object.keys(e.trees).sort().join(',');
+	// Selecting from the Phone tree outlines it in Phone and mirrors it into the other frames.
+	const find = (n: any, pred: (n: any) => boolean): any => (pred(n) ? n : n.children.map((c: any) => find(c, pred)).find(Boolean));
+	const header = find(e.trees.phone, (n: any) => n.tag === 'header');
+	await e.select('phone', [header.id]);
+	await wait(800);
+	out.rects = Object.entries(e.selectedRects).map(([f, r]: any) => `${f}:${Object.keys(r).length}`).sort().join(',');
+	return out;
+});
+log('parity', JSON.stringify(parity));
+
+// Phone edit through the Style panel: Framer cascade → base for Phone, md: pin for larger frames.
+const pagePath = join(project, 'src/routes/(app)/+page.svelte');
+const pageBefore = readFileSync(pagePath, 'utf8');
+await page.evaluate(async () => {
+	const e = (window as any).__editor;
+	const ids = await e.frames.get('phone').findLoc({ file: 'src/routes/(app)/+page.svelte', line: 17, column: 1, tag: 'section' });
+	await e.select('phone', ids.slice(0, 1));
+});
+await page.waitForTimeout(600);
+const gap2 = await page.locator('input[aria-label="Gap"]').boundingBox();
+if (gap2) {
+	await page.mouse.click(gap2.x + gap2.width / 2, gap2.y + gap2.height / 2);
+	await page.keyboard.press('Meta+A');
+	await page.keyboard.type('8');
+	await page.keyboard.press('Enter');
+	await page.waitForTimeout(1500);
+}
+log('phone edit:', readFileSync(pagePath, 'utf8').split('\n').find((l) => l.includes('<section')));
+log('selection kept after Enter:', await page.evaluate(() => (window as any).__editor.selected?.tag));
+await page.evaluate(() => (window as any).__editor.undo());
+await page.waitForTimeout(800);
+log('phone edit undone:', readFileSync(pagePath, 'utf8') === pageBefore);
+
+// Code panel follows the selection.
+await page.evaluate(() => ((window as any).__editor.codeOpen = true));
+await page.waitForTimeout(800);
+log('code panel line:', await page.evaluate(() => document.querySelector('.cm-cd-selected')?.textContent?.trim()));
+await page.evaluate(() => ((window as any).__editor.codeOpen = false));
+
+// Component canvas for the shadcn Button.
+await page.evaluate(async () => {
+	const e = (window as any).__editor;
+	await e.editComponent(e.components.find((c: any) => c.name === 'Button'));
+});
+await page.waitForFunction(() => ((window as any).__editor.trees.component?.children.length ?? 0) > 10, null, { timeout: 20_000 });
+log('component cells:', await page.evaluate(() => (window as any).__editor.trees.component.children.length));
+await shot('11-component-canvas');
+await page.evaluate(() => (window as any).__editor.exitComponent());
+await page.waitForTimeout(1500);
+
 await app.close();
 
 // Restart with the same profile: the session must survive.

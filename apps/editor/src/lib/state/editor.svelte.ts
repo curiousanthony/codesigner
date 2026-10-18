@@ -304,7 +304,7 @@ class EditorState {
 	async editComponent(component: ComponentInfo) {
 		if (!this.worktree) return;
 		try {
-			const path = await invoke('canvas:ensure-isolation', this.worktree);
+			const path = await invoke('canvas:ensure-isolation', this.worktree, this.devServer?.url ?? undefined);
 			this.selection = EMPTY_SELECTION;
 			this.mirrors = {};
 			this.trees = {};

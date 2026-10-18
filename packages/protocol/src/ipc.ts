@@ -46,8 +46,11 @@ export interface InvokeMap {
 	'project:components': (worktree: string) => ComponentInfo[];
 	'project:reveal': (path: string) => void;
 	'project:open-in-editor': (file: string, line?: number, column?: number) => void;
-	/** Writes the component canvas route into the working copy (git-ignored); returns its URL path. */
-	'canvas:ensure-isolation': (worktree: string) => string;
+	/**
+	 * Writes the component canvas route into the working copy (git-ignored) and,
+	 * given the dev server URL, waits until the server serves it. Returns its URL path.
+	 */
+	'canvas:ensure-isolation': (worktree: string, serverUrl?: string) => string;
 	/** Forces :hover / :active / :focus-visible on elements of a canvas frame (DevTools protocol). */
 	'canvas:force-states': (webContentsId: number, rules: { selector: string; states: string[] }[]) => boolean;
 

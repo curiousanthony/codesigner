@@ -44,14 +44,17 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 
 **Not verified yet:** the production path (editor `adapter-static` build served over `app://`, packaging) has never run; everything above was tested in development mode.
 
-**Known gaps carried into M2:** dev servers orphaned by a crash aren't reaped on the next launch; selection outlines only in the frame you clicked; no drag-to-reorder; editing in the Tablet/Phone frames writes to the variant in effect but doesn't yet create new `md:` overrides; Svelte HMR resets component-local state after each edit.
+**Known gaps carried into M2:** dev servers orphaned by a crash aren't reaped on the next launch; no drag-to-reorder; Svelte HMR resets component-local state after each edit. (Fixed since: outlines now show in every breakpoint; Tablet/Phone edits create responsive overrides.)
 
-## M2 — Full design surface ⬜
+## M2 — Full design surface 🚧
 
 - ⬜ Insert menu (`+`): Frame `F`, Stack `S`, Grid `⇧G`, Text `T`, Image; shadcn components from Assets
 - ⬜ Text editing on canvas (double-click), typography controls, text color
 - ⬜ Drag to reorder in stacks and in the layer tree; delete, duplicate (`⌘D`), copy/paste style
-- ⬜ Breakpoint-aware edits (`md:`/`lg:` per frame, inherited values greyed out), add/remove breakpoints
+- ✅ Breakpoint-aware edits with Framer's cascade: an edit applies to that breakpoint and smaller ones, larger frames get pinned (`gap-6` edited on Phone → `gap-3 md:gap-6`); overridden properties highlighted
+- ✅ Per-breakpoint layer trees in the Layers panel (Desktop / Tablet / Phone rows), selection mirrored in every frame, layer click outlines on the canvas
+- ✅ Add / resize / remove breakpoints, make one primary (the frame pill's `+` and `…`)
+- ✅ Code panel (⌘J): the file behind the selection with its tag highlighted, page and layout tabs; typing saves through the undo journal, invalid Svelte is refused, conflicts are detected
 - ⬜ Dark mode toggle in the dock; edits under dark write `dark:` variants
 - ⬜ States: hover/focus/active preview (CDP `forcePseudoState`) and editing (`hover:` …)
 - ⬜ Color picker with token swatches, opacity, hex/rgb/hsl/oklch
@@ -60,13 +63,14 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ⬜ Interact mode (use the app normally) vs Design mode toggle
 - ⬜ Optimistic preview CSS during drags (one file write on release)
 
-## M3 — Components & tokens ⬜
+## M3 — Components & tokens 🚧
 
 - ⬜ Assets panel: components (grouped, e.g. `ui/`), color tokens, typography tokens, images in `static/` and `src/lib/assets`
 - ⬜ Design tokens editor: light/dark values from `:root` / `.dark` / `@theme`, alias chains, add a token
 - ⬜ Component instance panel: props from `$props()` and variants from `tv()` (Variant dropdown, Text, Boolean, Icon…)
-- ⬜ "Edit component": component canvas with variant frames (`+ Variant`, `+ Hover / Pressed`), purple accent, breadcrumb
-- ⬜ Component isolation page served by a Vite plugin (with `$app/*` mocks)
+- ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`
+- ✅ Component isolation page served by the app's own dev server (git-ignored route `src/routes/__codesigner`, root layout only)
+- ⬜ Props-only components (no `tv()`): sample prop values per cell, required props
 - ⬜ Create a component from the selection (`⌥⌘K`), expose a property (the ⊕ binding)
 
 ## M4 — Version control UX ⬜
