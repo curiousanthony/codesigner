@@ -90,6 +90,14 @@ class EditorState {
 	/** Files that the editor scopes selection to (routes by default; a component file when editing it). */
 	scope = $state<string[]>(['src/routes/']);
 
+	/** Code panel under the canvas. */
+	codeOpen = $state(false);
+	codeHeight = $state(320);
+	/** Set while the code editor has focus, so menu undo/redo go to it instead of the visual journal. */
+	codeCommands: { undo: () => void; redo: () => void; hasFocus: () => boolean } | null = null;
+	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
+	readonly sourceListeners = new Set<(files: string[]) => void>();
+
 	busy = $state(false);
 	toasts = $state<Toast[]>([]);
 
@@ -155,7 +163,8 @@ class EditorState {
 			this.logs.push(log);
 			if (this.logs.length > 500) this.logs.splice(0, this.logs.length - 500);
 		});
-		on('source:changed', ({ files }) => {
+		on('source:changed', ({ worktree, files }) => {
+			if (worktree === this.worktree) for (const listener of this.sourceListeners) listener(files);
 			for (const file of files) this.pendingHmr.add(file);
 			if (this.project?.cssEntry && files.includes(this.project.cssEntry)) void this.loadTokens();
 		});

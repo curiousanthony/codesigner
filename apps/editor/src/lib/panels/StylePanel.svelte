@@ -288,9 +288,10 @@
 		editor.toast(m.component_editing({ name: info.componentTag ?? '' }));
 	}
 
+	/** Shows the selected layer in the code panel (it follows the selection and highlights the tag). */
 	function openInCode() {
-		if (!info?.loc || !editor.worktree) return;
-		void invoke('project:open-in-editor', `${editor.worktree}/${info.loc.file}`, info.loc.line, info.loc.column);
+		if (!info?.loc) return;
+		editor.codeOpen = true;
 	}
 </script>
 
@@ -311,7 +312,7 @@
 				{multi ? m.style_multi({ count: editor.selection.infos.length }) : info.name}
 			</span>
 			{#if info.loc}
-				<button type="button" class="truncate text-left text-[11px] text-muted hover:text-accent" title={m.action_open_in_code()} onclick={openInCode}>
+				<button type="button" class="truncate text-left text-[11px] text-muted hover:text-accent" title={m.code_show()} onclick={openInCode}>
 					{info.loc.file}:{info.loc.line}
 				</button>
 			{/if}
@@ -321,7 +322,7 @@
 				<Repeat class="size-3" />×{info.repeatCount}
 			</span>
 		{/if}
-		<button type="button" class="flex size-6 items-center justify-center rounded-md text-label hover:bg-control" title={m.action_open_in_code()} aria-label={m.action_open_in_code()} onclick={openInCode}>
+		<button type="button" class="flex size-6 items-center justify-center rounded-md text-label hover:bg-control" title={m.code_show()} aria-label={m.code_show()} onclick={openInCode}>
 			<Code class="size-3.5" />
 		</button>
 	</div>

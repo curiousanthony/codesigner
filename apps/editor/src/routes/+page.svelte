@@ -7,6 +7,7 @@
 	import TopBar from '#lib/TopBar.svelte';
 	import Toasts from '#lib/Toasts.svelte';
 	import Canvas from '#lib/canvas/Canvas.svelte';
+	import CodePanel from '#lib/code/CodePanel.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import PagesPanel from '#lib/panels/PagesPanel.svelte';
 	import LayersPanel from '#lib/panels/LayersPanel.svelte';
@@ -17,20 +18,27 @@
 
 	let canvas: Canvas | undefined = $state();
 
-	const isTyping = () => {
-		const el = document.activeElement as HTMLElement | null;
-		return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+	const isField = (el: EventTarget | null) => {
+		const node = el as HTMLElement | null;
+		return !!node?.tagName && (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || node.tagName === 'SELECT' || node.isContentEditable);
 	};
+	/** Typing in a field: canvas shortcuts stay off. `target` covers fields that blur themselves on Enter. */
+	const isTyping = (event?: Event) => isField(document.activeElement) || (!!event && isField(event.target));
 
 	function runCommand(command: string) {
 		switch (command) {
 			case 'undo':
-				if (isTyping()) document.execCommand('undo');
+				if (editor.codeCommands?.hasFocus()) editor.codeCommands.undo();
+				else if (isTyping()) document.execCommand('undo');
 				else void editor.undo();
 				break;
 			case 'redo':
-				if (isTyping()) document.execCommand('redo');
+				if (editor.codeCommands?.hasFocus()) editor.codeCommands.redo();
+				else if (isTyping()) document.execCommand('redo');
 				else void editor.redo();
+				break;
+			case 'toggle-code':
+				editor.codeOpen = !editor.codeOpen;
 				break;
 			case 'open-project':
 				void editor.pickAndOpen();
@@ -63,7 +71,7 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
-		if (!editor.project || isTyping()) return;
+		if (!editor.project || isTyping(event)) return;
 		const mod = event.metaKey || event.ctrlKey;
 		if (event.code === 'Space' && !event.repeat) {
 			editor.spaceHeld = true;
@@ -170,20 +178,25 @@
 				{/if}
 			</aside>
 
-			<main class="relative min-w-0 flex-1">
-				{#if editor.scope.length > 1}
-					<div class="absolute top-3 left-3 z-40 flex items-center gap-1.5 rounded-control bg-panel px-1.5 py-1 shadow-control">
-						<button type="button" class="rounded-[6px] px-2 py-1 hover:bg-control" onclick={() => editor.setScope(['src/routes/'])}>
-							{editor.currentTitle || m.breadcrumb_page()}
-						</button>
-						<span class="text-muted">›</span>
-						<span class="rounded-[6px] bg-component-tint px-2 py-1 font-medium text-component">
-							{editor.scope.at(-1)?.split('/').at(-1)?.replace('.svelte', '')}
-						</span>
-					</div>
+			<div class="flex min-w-0 flex-1 flex-col">
+				<main class="relative min-h-0 flex-1">
+					{#if editor.scope.length > 1}
+						<div class="absolute top-3 left-3 z-40 flex items-center gap-1.5 rounded-control bg-panel px-1.5 py-1 shadow-control">
+							<button type="button" class="rounded-[6px] px-2 py-1 hover:bg-control" onclick={() => editor.setScope(['src/routes/'])}>
+								{editor.currentTitle || m.breadcrumb_page()}
+							</button>
+							<span class="text-muted">›</span>
+							<span class="rounded-[6px] bg-component-tint px-2 py-1 font-medium text-component">
+								{editor.scope.at(-1)?.split('/').at(-1)?.replace('.svelte', '')}
+							</span>
+						</div>
+					{/if}
+					<Canvas bind:this={canvas} />
+				</main>
+				{#if editor.codeOpen}
+					<CodePanel />
 				{/if}
-				<Canvas bind:this={canvas} />
-			</main>
+			</div>
 
 			<aside class="flex w-[260px] shrink-0 flex-col border-l border-divider bg-panel">
 				<div class="px-2.5 py-2.5">

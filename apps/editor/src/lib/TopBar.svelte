@@ -6,6 +6,7 @@
 		ChevronDown,
 		GitBranch,
 		Play,
+		CodeXml,
 		Check,
 		FolderOpen,
 		RotateCw,
@@ -205,6 +206,9 @@
 			<span class="size-2 rounded-full {statusColor}"></span>
 			<span class="max-w-40 truncate">{statusText}</span>
 		</button>
+		<IconButton label={m.code_toggle()} active={editor.codeOpen} onclick={() => (editor.codeOpen = !editor.codeOpen)}>
+			<CodeXml class="size-4" strokeWidth={1.75} />
+		</IconButton>
 		<IconButton label={m.action_preview()} disabled={!editor.devServer?.url} onclick={() => editor.frameUrl() && invoke('app:open-external', editor.frameUrl()!)}>
 			<Play class="size-4" strokeWidth={1.75} />
 		</IconButton>

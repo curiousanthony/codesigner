@@ -65,6 +65,7 @@ export function buildMenu(send: (command: string) => void): Menu {
 				{ type: 'separator' },
 				cmd('Reload Canvas', 'reload-canvas', 'CmdOrCtrl+R'),
 				cmd('Toggle Interact Mode', 'toggle-interact', 'CmdOrCtrl+E'),
+				cmd('Toggle Code', 'toggle-code', 'CmdOrCtrl+J'),
 				{ type: 'separator' },
 				{ role: 'toggleDevTools', label: 'Editor Developer Tools' },
 				cmd('Canvas Developer Tools', 'canvas-devtools', 'CmdOrCtrl+Alt+I'),

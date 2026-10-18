@@ -61,6 +61,25 @@ export interface EditResult {
 	warnings?: string[];
 }
 
+/** A whole-file write from the code panel. */
+export interface CodeWriteRequest {
+	file: string;
+	content: string;
+	/** The text the code panel started editing from; the write is refused if the file has changed since. */
+	base?: string;
+}
+
+export interface CodeWriteResult {
+	ok: boolean;
+	changes: FileChange[];
+	/** The file changed on disk since `base`: `current` holds its text. */
+	conflict?: boolean;
+	current?: string;
+	/** Invalid Svelte: nothing was written. */
+	error?: string;
+	errorLine?: number;
+}
+
 export const locKey = (loc: SourceLoc) => `${loc.file}:${loc.line}:${loc.column}`;
 
 /** What the source says about one element (for the properties panel). */

@@ -198,3 +198,28 @@ describe('inspect', () => {
 		expect(span.text).toBe('Badge');
 	});
 });
+
+describe('code panel writes', () => {
+	test('writes, coalesces into one undo step and refuses invalid Svelte or stale bases', async () => {
+		const temp = tempProject('kit2-app', { 'src/routes/+page.svelte': '<h1 class="text-lg">Hi</h1>\n' });
+		const ws = new Workspace(temp.dir);
+		const file = 'src/routes/+page.svelte';
+		const original = ws.read(file);
+		expect(ws.writeText({ file, content: '<h1 class="text-xl">Hi</h1>\n', base: original }).ok).toBe(true);
+		const second = ws.writeText({ file, content: '<h1 class="text-xl">Hello</h1>\n' });
+		expect(second.ok).toBe(true);
+		const broken = ws.writeText({ file, content: '<h1 class="text-xl">Hello</h2>\n' });
+		expect(broken.ok).toBe(false);
+		expect(broken.error).toBeTruthy();
+		expect(ws.read(file)).toBe('<h1 class="text-xl">Hello</h1>\n');
+		const stale = ws.writeText({ file, content: 'x', base: original });
+		expect(stale.conflict).toBe(true);
+		ws.undo();
+		expect(ws.read(file)).toBe(original);
+		// A coalesced run that ends where it started leaves no undo step behind.
+		ws.writeText({ file, content: '<h1 class="text-2xl">Hi</h1>\n' });
+		ws.writeText({ file, content: original });
+		expect(ws.undo()).toBe(null);
+		temp.cleanup();
+	});
+});

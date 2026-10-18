@@ -32,6 +32,12 @@ export function registerSourceHandlers(
 		return result;
 	});
 
+	handle('source:write', (worktree, request) => {
+		const result = workspaceFor(worktree).writeText(request);
+		if (result.changes.length) onChanged(worktree, result.changes.map((c) => c.file));
+		return result;
+	});
+
 	handle('source:inspect', (worktree, loc) => workspaceFor(worktree).inspect(loc));
 
 	handle('source:undo', (worktree) => {

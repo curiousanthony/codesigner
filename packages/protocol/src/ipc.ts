@@ -7,7 +7,7 @@ import type {
 	RecentProject,
 	RouteInfo
 } from './project.js';
-import type { EditRequest, EditResult, ElementSource, FileChange } from './edits.js';
+import type { CodeWriteRequest, CodeWriteResult, EditRequest, EditResult, ElementSource, FileChange } from './edits.js';
 import type { DesignTokens, TokenEdit } from './tokens.js';
 import type { ComponentInfo } from './components.js';
 import type { SourceLoc } from './bridge.js';
@@ -58,6 +58,7 @@ export interface InvokeMap {
 
 	'source:read': (worktree: string, file: string) => string;
 	'source:edit': (worktree: string, request: EditRequest) => EditResult;
+	'source:write': (worktree: string, request: CodeWriteRequest) => CodeWriteResult;
 	'source:inspect': (worktree: string, loc: SourceLoc) => ElementSource | null;
 	'source:undo': (worktree: string) => FileChange[] | null;
 	'source:redo': (worktree: string) => FileChange[] | null;
@@ -107,6 +108,7 @@ export const INVOKE_CHANNELS = [
 	'devserver:logs',
 	'source:read',
 	'source:edit',
+	'source:write',
 	'source:inspect',
 	'source:undo',
 	'source:redo',

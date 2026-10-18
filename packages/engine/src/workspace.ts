@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import MagicString from 'magic-string';
+import { parse } from 'svelte/compiler';
 import type {
+	CodeWriteRequest,
+	CodeWriteResult,
 	ComponentInfo,
 	DesignTokens,
 	EditOp,
@@ -228,9 +231,32 @@ export class Workspace {
 		return { ok: true, changes, warnings };
 	}
 
-	private record(request: EditRequest, changes: FileChange[]) {
+	/**
+	 * Writes a whole file typed in the code panel. Journaled like visual edits
+	 * (consecutive saves of one file coalesce into one undo step). Invalid
+	 * Svelte is refused so a half-typed tag never reaches the dev server.
+	 */
+	writeText({ file, content, base }: CodeWriteRequest): CodeWriteResult {
+		const current = this.read(file);
+		if (base !== undefined && current !== base) return { ok: false, changes: [], conflict: true, current };
+		if (current === content) return { ok: true, changes: [] };
+		if (file.endsWith('.svelte')) {
+			try {
+				parse(content, { modern: true, filename: file });
+			} catch (error) {
+				const e = error as Error & { start?: { line: number } };
+				return { ok: false, changes: [], error: e.message.split('\n')[0], errorLine: e.start?.line };
+			}
+		}
+		this.write(file, content);
+		const change = { file, before: current, after: content };
+		this.record({ label: 'Edit code', ops: [], coalesce: true }, [change], `code|${file}`);
+		return { ok: true, changes: [change] };
+	}
+
+	private record(request: EditRequest, changes: FileChange[], key?: string) {
 		const coalesceKey = request.coalesce
-			? `${request.label}|${request.ops.flatMap((op) => this.targetsOf(op).map(locKey)).join(',')}`
+			? (key ?? `${request.label}|${request.ops.flatMap((op) => this.targetsOf(op).map(locKey)).join(',')}`)
 			: undefined;
 		const last = this.undoStack.at(-1);
 		if (coalesceKey && last?.coalesceKey === coalesceKey && Date.now() - last.at < 4000) {
@@ -241,6 +267,9 @@ export class Workspace {
 				else last.changes.push(change);
 			}
 			last.at = Date.now();
+			// Typing then undoing in the code panel can net out to nothing: drop the empty step.
+			last.changes = last.changes.filter((c) => c.before !== c.after);
+			if (last.changes.length === 0) this.undoStack.pop();
 		} else {
 			this.undoStack.push({ label: request.label, changes, at: Date.now(), coalesceKey });
 			if (this.undoStack.length > 200) this.undoStack.shift();
