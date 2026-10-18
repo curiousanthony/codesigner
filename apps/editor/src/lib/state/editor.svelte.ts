@@ -34,6 +34,8 @@ export interface Selection {
 	/** Layer path (root → node) per selected id, for Framer selection levels. */
 	paths: Record<NodeId, NodeId[]>;
 	infos: ElementInfo[];
+	/** Which occurrence of its source location each id is (3rd card of an each → 2), to find it again. */
+	occurrence: Record<NodeId, number>;
 }
 
 export interface Toast {
@@ -42,7 +44,7 @@ export interface Toast {
 	text: string;
 }
 
-const EMPTY_SELECTION: Selection = { frameId: null, ids: [], paths: {}, infos: [] };
+const EMPTY_SELECTION: Selection = { frameId: null, ids: [], paths: {}, infos: [], occurrence: {} };
 
 class EditorState {
 	appInfo = $state<AppInfo | null>(null);
@@ -75,9 +77,13 @@ class EditorState {
 	activeFrameId = $state<string | null>(null);
 	frameReady = $state<Record<string, boolean>>({});
 
-	tree = $state<LayerNode | null>(null);
+	/** Layer tree of every breakpoint frame: responsive markup can differ between them. */
+	trees = $state<Record<string, LayerNode | null>>({});
+	/** Expanded rows in the Layers panel, keyed by `frameId:nodeId` (node ids are per frame). */
 	expanded = $state<Record<string, boolean>>({});
 	selection = $state<Selection>(EMPTY_SELECTION);
+	/** The selection's counterparts in the other breakpoint frames. */
+	mirrors = $state<Record<string, NodeId[]>>({});
 	hover = $state<{ frameId: string; id: NodeId } | null>(null);
 	hoverRect = $state<{ frameId: string; rect: Rect } | null>(null);
 	selectedRects = $state<Record<string, Record<NodeId, Rect>>>({});
@@ -99,6 +105,22 @@ class EditorState {
 
 	get primaryFrameId(): string | null {
 		return this.breakpoints.find((b) => b.primary)?.id ?? this.breakpoints[0]?.id ?? null;
+	}
+
+	/** Layer tree of the primary frame. */
+	get tree(): LayerNode | null {
+		const id = this.primaryFrameId;
+		return id ? (this.trees[id] ?? null) : null;
+	}
+
+	isExpanded(frameId: string, id: string): boolean {
+		return !!this.expanded[`${frameId}:${id}`];
+	}
+
+	setExpanded(frameId: string, ids: string[], open: boolean) {
+		const next = { ...this.expanded };
+		for (const id of ids) next[`${frameId}:${id}`] = open;
+		this.expanded = next;
 	}
 
 	get currentRoute(): RouteInfo | null {
@@ -183,7 +205,7 @@ class EditorState {
 		this.worktree = null;
 		this.devServer = null;
 		this.routes = [];
-		this.tree = null;
+		this.trees = {};
 		this.selection = EMPTY_SELECTION;
 		this.frames.clear();
 	}
@@ -216,7 +238,7 @@ class EditorState {
 		if (this.worktree && this.worktree !== worktree) void invoke('devserver:stop', this.worktree);
 		this.worktree = worktree;
 		this.selection = EMPTY_SELECTION;
-		this.tree = null;
+		this.trees = {};
 		this.logs = await invoke('devserver:logs', worktree);
 		this.devServer = await invoke('devserver:state', worktree);
 		const [routes] = await Promise.all([invoke('project:routes', worktree), this.loadTokens(), this.loadComponents()]);
@@ -252,6 +274,38 @@ class EditorState {
 		void invoke('devserver:stop', worktree).then(() => invoke('devserver:start', worktree));
 	}
 
+	// ----------------------------------------------------- breakpoints
+	/** Adds a breakpoint frame (kept sorted widest first, like Framer). */
+	async addBreakpoint(width: number, name?: string) {
+		const width_ = Math.round(Math.min(3840, Math.max(240, width)));
+		if (this.breakpoints.some((b) => b.width === width_)) return;
+		let id = name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `bp-${width_}`;
+		if (this.breakpoints.some((b) => b.id === id)) id = `${id}-${width_}`;
+		const height = width_ < 600 ? 844 : width_ < 1024 ? 1080 : 800;
+		const next = [...this.breakpoints, { id, name: name ?? `${width_}`, width: width_, height }].sort((a, b) => b.width - a.width);
+		await this.updateSettings({ breakpoints: next });
+	}
+
+	async removeBreakpoint(id: string) {
+		const bp = this.breakpoints.find((b) => b.id === id);
+		if (!bp || bp.primary || this.breakpoints.length <= 1) return;
+		if (this.selection.frameId === id) this.clearSelection();
+		const { [id]: _tree, ...trees } = this.trees;
+		this.trees = trees;
+		await this.updateSettings({ breakpoints: this.breakpoints.filter((b) => b.id !== id) });
+	}
+
+	async resizeBreakpoint(id: string, width: number) {
+		const width_ = Math.round(Math.min(3840, Math.max(240, width)));
+		if (this.breakpoints.some((b) => b.id !== id && b.width === width_)) return;
+		const next = this.breakpoints.map((b) => (b.id === id ? { ...b, width: width_ } : b)).sort((a, b) => b.width - a.width);
+		await this.updateSettings({ breakpoints: next });
+	}
+
+	async setPrimaryBreakpoint(id: string) {
+		await this.updateSettings({ breakpoints: this.breakpoints.map((b) => ({ ...b, primary: b.id === id })) });
+	}
+
 	// ------------------------------------------------------ navigation
 	frameUrl(path = this.currentPath): string | null {
 		if (!this.devServer?.url) return null;
@@ -269,6 +323,7 @@ class EditorState {
 	goTo(path: string) {
 		this.currentPath = path;
 		this.selection = EMPTY_SELECTION;
+		this.mirrors = {};
 		this.hover = null;
 		const url = this.frameUrl(path);
 		if (!url) return;
@@ -315,7 +370,10 @@ class EditorState {
 		}
 		this.currentTitle = title;
 		// Re-announcements of the same page (hydration, reconnects) keep the selection.
-		if (previous !== url) this.selection = EMPTY_SELECTION;
+		if (previous !== url) {
+			this.selection = EMPTY_SELECTION;
+			this.mirrors = {};
+		}
 	}
 
 	async refreshTree() {
@@ -325,10 +383,15 @@ class EditorState {
 	}
 
 	setTree(frameId: string, root: LayerNode | null) {
-		if (frameId === this.primaryFrameId) this.tree = root;
+		this.trees = { ...this.trees, [frameId]: root };
 	}
 
-	pathOf(id: NodeId): NodeId[] {
+	private treeOf(frameId?: string | null): LayerNode | null {
+		const id = frameId ?? this.selection.frameId ?? this.primaryFrameId;
+		return id ? (this.trees[id] ?? null) : null;
+	}
+
+	pathOf(id: NodeId, frameId?: string | null): NodeId[] {
 		const path: NodeId[] = [];
 		const walk = (node: LayerNode, trail: NodeId[]): boolean => {
 			for (const child of node.children) {
@@ -341,44 +404,77 @@ class EditorState {
 			}
 			return false;
 		};
-		if (this.tree) walk(this.tree, []);
+		const tree = this.treeOf(frameId);
+		if (tree) walk(tree, []);
 		return path;
 	}
 
 	// ------------------------------------------------------- selection
-	async select(frameId: string, ids: NodeId[], paths?: Record<NodeId, NodeId[]>) {
+	async select(frameId: string, ids: NodeId[], paths?: Record<NodeId, NodeId[]>, occurrence?: Record<NodeId, number>) {
 		const frame = this.frames.get(frameId);
 		if (!frame) return;
 		const infos = await frame.describe(ids);
 		const resolvedPaths: Record<NodeId, NodeId[]> = {};
-		for (const id of ids) resolvedPaths[id] = paths?.[id] ?? this.pathOf(id);
-		this.selection = { frameId, ids: infos.map((i) => i.id), paths: resolvedPaths, infos };
+		for (const id of ids) resolvedPaths[id] = paths?.[id] ?? this.pathOf(id, frameId);
+		const resolvedOccurrence: Record<NodeId, number> = {};
+		for (const info of infos) {
+			if (occurrence?.[info.id] !== undefined) resolvedOccurrence[info.id] = occurrence[info.id];
+			else if (info.loc) {
+				const twins = await frame.findLoc({ ...info.loc, tag: info.componentTag ?? info.tag });
+				resolvedOccurrence[info.id] = Math.max(0, twins.indexOf(info.id));
+			}
+		}
+		this.selection = { frameId, ids: infos.map((i) => i.id), paths: resolvedPaths, infos, occurrence: resolvedOccurrence };
 		this.activeFrameId = frameId;
-		for (const info of infos) this.revealInTree(info.id);
+		this.mirrors = {};
+		for (const info of infos) this.revealInTree(info.id, frameId);
+		this.syncHighlights();
+		await this.updateMirrors();
+	}
+
+	/** Finds the selected layers in the other breakpoint frames (same source location and occurrence). */
+	async updateMirrors() {
+		const { frameId, infos, occurrence } = this.selection;
+		const mirrors: Record<string, NodeId[]> = {};
+		await Promise.all(
+			[...this.frames].map(async ([id, frame]) => {
+				if (id === frameId) return;
+				const ids: NodeId[] = [];
+				for (const info of infos) {
+					if (!info.loc) continue;
+					const found = await frame.findLoc({ ...info.loc, tag: info.componentTag ?? info.tag });
+					const pick = found[occurrence[info.id] ?? 0] ?? found[0];
+					if (pick && !ids.includes(pick)) ids.push(pick);
+				}
+				mirrors[id] = ids;
+			})
+		);
+		if (this.selection.frameId !== frameId || this.selection.infos !== infos) return; // superseded
+		this.mirrors = mirrors;
 		this.syncHighlights();
 	}
 
 	clearSelection() {
 		this.selection = EMPTY_SELECTION;
+		this.mirrors = {};
 		this.syncHighlights();
 	}
 
-	revealInTree(id: NodeId) {
-		const path = this.pathOf(id);
-		const next = { ...this.expanded };
-		for (const ancestor of path.slice(0, -1)) next[ancestor] = true;
-		this.expanded = next;
+	revealInTree(id: NodeId, frameId: string) {
+		const path = this.pathOf(id, frameId);
+		this.setExpanded(frameId, ['@frame', ...path.slice(0, -1)], true);
 	}
 
-	/** Choose what a click on `hitPath` selects (Framer levels). */
-	pick(hitPath: NodeId[], gesture: 'click' | 'double' | 'deep'): NodeId | null {
-		const current = this.selection.ids[0];
-		const selectedPath = current ? (this.selection.paths[current] ?? null) : null;
+	/** Choose what a click on `hitPath` in `frameId` selects (Framer levels). */
+	pick(hitPath: NodeId[], gesture: 'click' | 'double' | 'deep', frameId?: string): NodeId | null {
+		const sameFrame = !frameId || frameId === this.selection.frameId;
+		const current = sameFrame ? this.selection.ids[0] : frameId ? this.mirrors[frameId]?.[0] : undefined;
+		const selectedPath = !current ? null : sameFrame ? (this.selection.paths[current] ?? null) : this.pathOf(current, frameId);
 		return pickLayer(hitPath, selectedPath, gesture);
 	}
 
 	async selectFromHit(frameId: string, hitPath: NodeId[], gesture: 'click' | 'double' | 'deep', additive = false) {
-		const id = this.pick(frameId === this.selection.frameId ? hitPath : hitPath, gesture);
+		const id = this.pick(hitPath, gesture, frameId);
 		if (!id) {
 			if (!additive) this.clearSelection();
 			return;
@@ -396,7 +492,7 @@ class EditorState {
 	async selectParent() {
 		const id = this.selection.ids[0];
 		if (!id || !this.selection.frameId) return;
-		const path = this.selection.paths[id] ?? this.pathOf(id);
+		const path = this.selection.paths[id] ?? this.pathOf(id, this.selection.frameId);
 		const parent = parentOf(path);
 		if (parent) await this.select(this.selection.frameId, [parent], { [parent]: path.slice(0, -1) });
 		else this.clearSelection();
@@ -406,21 +502,22 @@ class EditorState {
 		const id = this.selection.ids[0];
 		const frameId = this.selection.frameId;
 		if (!id || !frameId) return;
-		const node = this.findNode(id);
+		const node = this.findNode(id, frameId);
 		if (!node?.children.length) return;
-		const path = this.selection.paths[id] ?? this.pathOf(id);
+		const path = this.selection.paths[id] ?? this.pathOf(id, frameId);
 		const paths: Record<NodeId, NodeId[]> = {};
 		for (const child of node.children) paths[child.id] = [...path, child.id];
 		await this.select(frameId, node.children.map((c) => c.id), paths);
 	}
 
-	findNode(id: NodeId): LayerNode | null {
+	findNode(id: NodeId, frameId?: string | null): LayerNode | null {
 		let found: LayerNode | null = null;
 		const walk = (node: LayerNode) => {
 			if (node.id === id) found = node;
 			else node.children.forEach(walk);
 		};
-		if (this.tree) walk(this.tree);
+		const tree = this.treeOf(frameId);
+		if (tree) walk(tree);
 		return found;
 	}
 
@@ -436,7 +533,7 @@ class EditorState {
 			frame.send({
 				type: 'highlight',
 				hover: this.hover?.frameId === frameId ? this.hover.id : null,
-				selected: this.selection.frameId === frameId ? this.selection.ids : []
+				selected: this.selection.frameId === frameId ? this.selection.ids : (this.mirrors[frameId] ?? [])
 			});
 		}
 	}
@@ -448,24 +545,28 @@ class EditorState {
 
 	/** After HMR or DOM changes: re-find the selected layers by source location. */
 	async reresolveSelection() {
-		const { frameId, infos } = this.selection;
+		const { frameId, infos, occurrence } = this.selection;
 		const frame = frameId ? this.frames.get(frameId) : null;
 		if (!frame || infos.length === 0) return;
 		const ids: NodeId[] = [];
+		const nextOccurrence: Record<NodeId, number> = {};
 		for (const info of infos) {
 			if (info.loc) {
 				const found = await frame.findLoc({ ...info.loc, tag: info.componentTag ?? info.tag });
-				const pick = found.length ? found[Math.min(found.length - 1, 0)] : null;
-				if (pick && !ids.includes(pick)) ids.push(pick);
+				const index = Math.min(occurrence[info.id] ?? 0, found.length - 1);
+				const pick = index >= 0 ? found[index] : null;
+				if (pick && !ids.includes(pick)) {
+					ids.push(pick);
+					nextOccurrence[pick] = index;
+				}
 			}
 		}
 		if (ids.length === 0) {
-			this.selection = EMPTY_SELECTION;
-			this.syncHighlights();
+			this.clearSelection();
 			return;
 		}
 		await this.refreshTreeNow(frameId!);
-		await this.select(frameId!, ids);
+		await this.select(frameId!, ids, undefined, nextOccurrence);
 	}
 
 	private async refreshTreeNow(frameId: string) {
@@ -591,6 +692,7 @@ class EditorState {
 	setScope(files: string[]) {
 		this.scope = files;
 		this.selection = EMPTY_SELECTION;
+		this.mirrors = {};
 		for (const frame of this.frames.values()) frame.send({ type: 'set-scope', files });
 	}
 }

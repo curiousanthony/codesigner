@@ -133,6 +133,59 @@ export function setFamily(className: string, family: Family, utilities: string[]
 	return { remove: remove.filter((t) => !add.includes(t)), add: add.filter((t) => !remove.includes(t)) };
 }
 
+/**
+ * The screen to put an override at so that a frame of width `below` keeps one
+ * value and a frame of width `above` another: the largest screen in
+ * (below, above], stepping down once when it sits exactly on `above`
+ * (Tablet 810 / Desktop 1280 → `lg`, Phone 390 / Tablet 810 → `md`).
+ */
+export function screenBetween(below: number, above: number, breakpoints = DEFAULT_BREAKPOINTS): string | null {
+	const inRange = Object.entries(breakpoints)
+		.filter(([, width]) => width > below && width <= above)
+		.sort((a, b) => b[1] - a[1]);
+	if (inRange.length === 0) return null;
+	if (inRange[0][1] === above && inRange.length > 1) return inRange[1][0];
+	return inRange[0][0];
+}
+
+/**
+ * Framer breakpoint semantics on mobile-first Tailwind: an edit made in a
+ * frame changes that frame and the smaller frames inheriting the same value,
+ * never the larger frames. When a larger frame shares the class being edited,
+ * it is pinned to its current value with a responsive override.
+ *
+ * `frameWidths` are the canvas breakpoints (e.g. [1280, 810, 390]).
+ */
+export function responsiveSet(
+	className: string,
+	family: Family,
+	utilities: string[],
+	frameWidth: number,
+	frameWidths: number[],
+	breakpoints = DEFAULT_BREAKPOINTS
+): ClassEdit {
+	const prefix = activePrefix(className, family, frameWidth, breakpoints);
+	const edit = setFamily(className, family, utilities, prefix);
+	const prefixWidth = prefix ? breakpoints[prefix.slice(0, -1)] : 0;
+	// The next responsive variant of this family already used above the edited one.
+	let nextUsed = Infinity;
+	for (const token of tokensOf(className)) {
+		const { variants, utility } = parseToken(token);
+		if (variants.length !== 1 || !FAMILIES[family](utility)) continue;
+		const width = breakpoints[variants[0]];
+		if (width !== undefined && width > prefixWidth && width < nextUsed) nextUsed = width;
+	}
+	const sharing = frameWidths.filter((w) => w > frameWidth && w < nextUsed).sort((a, b) => a - b);
+	if (sharing.length === 0) return edit;
+	const previous = familyTokens(className, family, prefix).map((t) => parseToken(t).utility);
+	// With no class to restore (the value came from a default), larger frames follow the edit.
+	if (previous.length === 0) return edit;
+	const screen = screenBetween(frameWidth, sharing[0], breakpoints);
+	if (!screen) return edit;
+	const pins = previous.map((u) => `${screen}:${u}`).filter((t) => !className.split(/\s+/).includes(t));
+	return mergeEdits(edit, { remove: [], add: pins });
+}
+
 export function mergeEdits(...edits: ClassEdit[]): ClassEdit {
 	const remove = new Set<string>();
 	const add = new Set<string>();

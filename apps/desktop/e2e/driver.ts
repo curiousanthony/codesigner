@@ -145,6 +145,24 @@ const server = createServer(async (req, res) => {
 				out = box;
 				break;
 			}
+			case '/point': {
+				// Host coordinates of the center of a guest element: {"frame":0,"js":"document.querySelector('h1')"}
+				const { frame = 0, js } = json();
+				out = await page.evaluate(
+					async ({ frame, js }) => {
+						const webview = document.querySelectorAll('webview')[frame] as any;
+						const r = await webview.executeJavaScript(
+							`(() => { const el = (${js}); if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`
+						);
+						if (!r) return null;
+						const host = webview.getBoundingClientRect();
+						const scale = (window as any).__editor.camera.scale;
+						return { x: Math.round(host.left + r[0] * scale), y: Math.round(host.top + r[1] * scale) };
+					},
+					{ frame, js }
+				);
+				break;
+			}
 			case '/console':
 				out = consoleLog.splice(0);
 				break;

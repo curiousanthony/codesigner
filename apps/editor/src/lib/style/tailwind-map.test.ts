@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { activePrefix, familyTokens, parseToken, setFamily, sizeMode, spacing } from './tailwind-map';
+import { activePrefix, familyTokens, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
 
 describe('tailwind map', () => {
 	test('parses variant prefixes', () => {
@@ -44,5 +44,31 @@ describe('tailwind map', () => {
 		expect(spacing('gap', 12)).toBe('gap-3');
 		expect(spacing('gap', 2)).toBe('gap-0.5');
 		expect(spacing('gap', 13)).toBe('gap-[13px]');
+	});
+
+	test('picks a screen between two frames', () => {
+		expect(screenBetween(390, 810)).toBe('md');
+		expect(screenBetween(810, 1280)).toBe('lg');
+		expect(screenBetween(1280, 1300)).toBe(null);
+	});
+
+	describe('Framer breakpoint semantics', () => {
+		const frames = [1280, 810, 390];
+		test('editing the primary frame changes every frame that inherits', () => {
+			expect(responsiveSet('flex gap-2', 'gap', ['gap-4'], 1280, frames)).toEqual({ remove: ['gap-2'], add: ['gap-4'] });
+		});
+		test('editing Phone pins the larger frames to their value', () => {
+			expect(responsiveSet('flex gap-2', 'gap', ['gap-4'], 390, frames)).toEqual({ remove: ['gap-2'], add: ['gap-4', 'md:gap-2'] });
+		});
+		test('editing Tablet changes Tablet and Phone but not Desktop', () => {
+			expect(responsiveSet('flex gap-2', 'gap', ['gap-4'], 810, frames)).toEqual({ remove: ['gap-2'], add: ['gap-4', 'lg:gap-2'] });
+		});
+		test('an existing override for the frame is edited in place', () => {
+			expect(responsiveSet('gap-2 md:gap-4 lg:gap-8', 'gap', ['gap-6'], 810, frames)).toEqual({ remove: ['md:gap-4'], add: ['md:gap-6'] });
+			expect(responsiveSet('gap-2 md:gap-4', 'gap', ['gap-6'], 390, frames)).toEqual({ remove: ['gap-2'], add: ['gap-6'] });
+		});
+		test('a value with no class to restore applies to larger frames too', () => {
+			expect(responsiveSet('flex', 'gap', ['gap-4'], 390, frames)).toEqual({ remove: [], add: ['gap-4'] });
+		});
 	});
 });

@@ -114,10 +114,12 @@
 		pan = null;
 	}
 
-	let fitted = false;
+	// Fit once the frames are known, and again whenever breakpoints are added, removed or resized.
+	let fittedFor = '';
 	$effect(() => {
-		if (!fitted && worldWidth && viewport) {
-			fitted = true;
+		const signature = editor.breakpoints.map((b) => `${b.id}:${b.width}`).join(',');
+		if (worldWidth && viewport && signature !== fittedFor) {
+			fittedFor = signature;
 			requestAnimationFrame(zoomToFit);
 		}
 	});

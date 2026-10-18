@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Breakpoint, GuestToHost, NodeId } from '@codesigner/protocol';
-	import { Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
+	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
 	import { editor } from '#lib/state/editor.svelte.js';
 	import { BridgeClient } from './bridge-client';
+	import { breakpointLabel } from './breakpoints';
 	import { m } from '#lib/paraglide/messages.js';
 
 	type Props = {
@@ -46,7 +47,7 @@
 				client?.send({ type: 'init', frameId, scope: editor.scope, mode: editor.mode });
 				if (editor.darkPreview) client?.send({ type: 'set-dark', dark: true });
 				editor.onFrameNavigated(frameId, message.url, message.title);
-				if (isPrimary) client?.send({ type: 'request-tree' });
+				client?.send({ type: 'request-tree' });
 				editor.syncHighlights();
 				break;
 			case 'tree':
@@ -62,11 +63,11 @@
 					editor.onHmr();
 					void editor.reresolveSelection();
 				}
-				if (isPrimary) client?.send({ type: 'request-tree' });
+				client?.send({ type: 'request-tree' });
 				break;
 			case 'navigated':
 				editor.onFrameNavigated(frameId, message.url, message.title);
-				if (isPrimary) client?.send({ type: 'request-tree' });
+				client?.send({ type: 'request-tree' });
 				break;
 			case 'scrolled':
 				if (!message.consumed) {
@@ -157,7 +158,7 @@
 		const path = await client.hit(x, y);
 		if (seq !== hoverSeq) return;
 		lastHit = path;
-		const id = editor.pick(path, event.metaKey || event.ctrlKey ? 'deep' : 'click');
+		const id = editor.pick(path, event.metaKey || event.ctrlKey ? 'deep' : 'click', frameId);
 		editor.setHover(frameId, id);
 	}
 
@@ -187,19 +188,50 @@
 		event.preventDefault();
 	}
 
-	const label = $derived(
-		breakpoint.id === 'desktop' ? m.breakpoint_desktop() : breakpoint.id === 'tablet' ? m.breakpoint_tablet() : breakpoint.id === 'phone' ? m.breakpoint_phone() : breakpoint.name
-	);
+	const label = $derived(breakpointLabel(breakpoint));
+	/** On-screen pill width is small: keep only the essentials. */
+	const compact = $derived(breakpoint.width * scale < 190);
+
+	// ------------------------------------------------------ breakpoint menu
+	let menu = $state<'add' | 'more' | null>(null);
+	let menuEl = $state<HTMLDivElement | null>(null);
+	let customWidth = $state('');
+	let widthDraft = $state('');
+	$effect(() => {
+		if (menu === 'more') widthDraft = String(breakpoint.width);
+	});
+	const PRESETS = [
+		{ name: 'Desktop', width: 1440 },
+		{ name: 'Laptop', width: 1280 },
+		{ name: 'Tablet', width: 810 },
+		{ name: 'Tablet portrait', width: 768 },
+		{ name: 'Phone', width: 390 },
+		{ name: 'Small phone', width: 360 }
+	];
+	const presets = $derived(PRESETS.filter((p) => !editor.breakpoints.some((b) => b.width === p.width)));
+	$effect(() => {
+		if (!menu) return;
+		const close = (event: PointerEvent) => {
+			if (menuEl && !menuEl.contains(event.target as Node) && !(event.target as HTMLElement).closest?.('[data-bp-toggle]')) menu = null;
+		};
+		const onKey = (event: KeyboardEvent) => event.key === 'Escape' && (menu = null);
+		window.addEventListener('pointerdown', close, true);
+		window.addEventListener('keydown', onKey, true);
+		return () => {
+			window.removeEventListener('pointerdown', close, true);
+			window.removeEventListener('keydown', onKey, true);
+		};
+	});
 </script>
 
 <div
 	class="absolute top-0 left-0 origin-top-left"
-	style="width:{breakpoint.width}px; height:{breakpoint.height}px; --inv:{1 / scale};
+	style="width:{breakpoint.width}px; height:{breakpoint.height}px; --inv:{1 / scale}; z-index:{menu ? 40 : 'auto'};
 		transform: translate({editor.camera.x + x * scale}px, {editor.camera.y}px) scale({scale});"
 >
 	<!-- Breakpoint label pill, kept at a constant on-screen size -->
 	<div
-		class="absolute bottom-full left-0 origin-bottom-left pb-2"
+		class="absolute bottom-full left-0 z-40 origin-bottom-left pb-2"
 		style="width:{breakpoint.width * scale}px; transform: scale({1 / scale});"
 	>
 		<div
@@ -208,7 +240,7 @@
 		>
 			<button
 				type="button"
-				class="flex size-5 items-center justify-center rounded-[4px] hover:bg-black/5"
+				class="flex size-5 shrink-0 items-center justify-center rounded-[4px] hover:bg-black/5 {compact ? 'hidden' : ''}"
 				aria-label={m.frame_preview()}
 				title={m.frame_preview()}
 				onclick={() => url && window.open(url)}
@@ -226,7 +258,7 @@
 			{/if}
 			<button
 				type="button"
-				class="flex size-5 items-center justify-center rounded-[4px] hover:bg-black/5"
+				class="flex size-5 shrink-0 items-center justify-center rounded-[4px] hover:bg-black/5 {compact ? 'hidden' : ''}"
 				aria-label={m.frame_reload()}
 				title={m.frame_reload()}
 				onclick={reload}
@@ -235,13 +267,63 @@
 			</button>
 			<button
 				type="button"
-				class="flex size-5 items-center justify-center rounded-[5px] hover:bg-black/5"
+				class="flex size-5 items-center justify-center rounded-[5px] hover:bg-black/5 {menu === 'more' ? 'bg-black/5' : ''}"
+				data-bp-toggle
+				aria-label={m.breakpoint_options()}
+				title={m.breakpoint_options()}
+				onclick={() => (menu = menu === 'more' ? null : 'more')}
+			>
+				<Ellipsis class="size-3" />
+			</button>
+			<button
+				type="button"
+				class="flex size-5 items-center justify-center rounded-[5px] hover:bg-black/5 {menu === 'add' ? 'bg-black/5' : ''}"
+				data-bp-toggle
 				aria-label={m.frame_add_breakpoint()}
 				title={m.frame_add_breakpoint()}
+				onclick={() => (menu = menu === 'add' ? null : 'add')}
 			>
 				<Plus class="size-3" />
 			</button>
 		</div>
+
+		{#if menu}
+			<div
+				bind:this={menuEl}
+				class="absolute top-full right-0 mt-1 w-56 rounded-popover bg-popover p-1 text-[12px] text-fg shadow-popover"
+				role="menu"
+			>
+				{#if menu === 'add'}
+					<p class="px-2.5 pt-1 pb-1.5 text-[11px] text-muted">{m.frame_add_breakpoint()}</p>
+					{#each presets as preset (preset.width)}
+						<button type="button" role="menuitem" class="flex h-[30px] w-full items-center gap-2.5 rounded-[6px] px-2.5 text-left hover:bg-accent hover:text-white"
+							onclick={() => { menu = null; void editor.addBreakpoint(preset.width, preset.name); }}>
+							<span class="flex-1">{preset.name}</span>
+							<span class="tabular-nums opacity-60">{preset.width}</span>
+						</button>
+					{/each}
+					<form class="flex items-center gap-1.5 px-1.5 pt-1.5 pb-1" onsubmit={(e) => { e.preventDefault(); const w = Number(customWidth); if (w > 0) { menu = null; customWidth = ''; void editor.addBreakpoint(w); } }}>
+						<input class="h-[26px] min-w-0 flex-1 rounded-control bg-control px-2 tabular-nums outline-none placeholder:text-muted" placeholder={m.breakpoint_custom_width()} inputmode="numeric" bind:value={customWidth} />
+						<button type="submit" class="h-[26px] rounded-control bg-accent px-2 text-white">{m.action_add()}</button>
+					</form>
+				{:else}
+					<form class="flex items-center gap-2 px-2.5 py-1" onsubmit={(e) => { e.preventDefault(); const w = Number(widthDraft); if (w > 0) { menu = null; void editor.resizeBreakpoint(frameId, w); } }}>
+						<span class="flex-1 text-label">{m.breakpoint_width()}</span>
+						<input class="h-[26px] w-20 rounded-control bg-control px-2 text-right tabular-nums outline-none" inputmode="numeric" bind:value={widthDraft} />
+					</form>
+					{#if !isPrimary}
+						<button type="button" role="menuitem" class="flex h-[30px] w-full items-center gap-2.5 rounded-[6px] px-2.5 text-left hover:bg-accent hover:text-white"
+							onclick={() => { menu = null; void editor.setPrimaryBreakpoint(frameId); }}>
+							{m.breakpoint_make_primary()}
+						</button>
+						<button type="button" role="menuitem" class="flex h-[30px] w-full items-center gap-2.5 rounded-[6px] px-2.5 text-left text-danger hover:bg-danger hover:text-white"
+							onclick={() => { menu = null; void editor.removeBreakpoint(frameId); }}>
+							{m.breakpoint_remove()}
+						</button>
+					{/if}
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<div

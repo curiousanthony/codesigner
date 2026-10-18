@@ -36,7 +36,7 @@
 		opacityClass,
 		parseToken,
 		px,
-		setFamily,
+		responsiveSet,
 		sizeClasses,
 		sizeMode,
 		spacing,
@@ -45,6 +45,7 @@
 		type SizeMode
 	} from '#lib/style/tailwind-map.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { breakpointLabel } from '#lib/canvas/breakpoints.js';
 
 	const info = $derived(editor.selected);
 	const multi = $derived(editor.selection.infos.length > 1);
@@ -104,7 +105,14 @@
 		void editor.previewClasses(edit.remove, edit.add);
 	}
 
-	const set = (family: Family, utilities: string[]) => setFamily(cls, family, utilities, prefixFor(family));
+	const frameWidths = $derived(editor.breakpoints.map((b) => b.width));
+	const frame = $derived(editor.breakpoints.find((b) => b.id === editor.selection.frameId) ?? null);
+	const primaryWidth = $derived(editor.breakpoints.find((b) => b.id === editor.primaryFrameId)?.width ?? frameWidth);
+	/** A property has its own value on this breakpoint (it differs from what the primary breakpoint uses). */
+	const overridden = (...families: Family[]) =>
+		frameWidth !== primaryWidth && families.some((f) => activePrefix(cls, f, frameWidth) !== activePrefix(cls, f, primaryWidth));
+	// Framer semantics: edits apply to this breakpoint and the smaller ones inheriting from it.
+	const set = (family: Family, utilities: string[]) => responsiveSet(cls, family, utilities, frameWidth, frameWidths);
 
 	// ------------------------------------------------------------ size
 	const widthMode = $derived<SizeMode>(c ? sizeMode(cls, 'width', c.parentDisplay, c.parentFlexDirection, frameWidth) : 'auto');
@@ -181,16 +189,15 @@
 	const uniformPadding = $derived(padding.top === padding.right && padding.right === padding.bottom && padding.bottom === padding.left);
 
 	function setPadding(side: 'all' | 'top' | 'right' | 'bottom' | 'left', value: number, coalesce: boolean) {
-		const prefix = prefixFor('padding');
 		const utility = side === 'all' ? spacing('p', value) : spacing({ top: 'pt', right: 'pr', bottom: 'pb', left: 'pl' }[side], value);
 		let edit: ClassEdit;
 		if (side === 'all') {
-			edit = setFamily(cls, 'padding', [utility], prefix);
+			edit = set('padding', [utility]);
 		} else {
 			// Expand shorthands to per-side classes so other sides keep their values.
 			const sides = { ...padding, [side]: value };
 			const utilities = (['top', 'right', 'bottom', 'left'] as const).map((s) => spacing({ top: 'pt', right: 'pr', bottom: 'pb', left: 'pl' }[s], sides[s]));
-			edit = setFamily(cls, 'padding', utilities, prefix);
+			edit = set('padding', utilities);
 		}
 		void apply(m.edit_padding(), edit, coalesce);
 	}
@@ -380,17 +387,24 @@
 		</Section>
 	{/if}
 
+	{#if c && frame && !frame.primary}
+		<div class="mx-3 mt-2 flex items-center gap-2 rounded-control bg-accent-tint px-2.5 py-1.5 text-accent">
+			<span class="size-1.5 shrink-0 rounded-full bg-accent"></span>
+			<span class="min-w-0 flex-1 truncate">{m.style_breakpoint_scope({ name: breakpointLabel(frame) })}</span>
+		</div>
+	{/if}
+
 	{#if c}
 		<!-- Position -->
 		<Section title={m.section_position()}>
-			<Row label={m.label_type()}>
+			<Row label={m.label_type()} overridden={overridden('position')}>
 				<SelectField options={POSITIONS} value={c.position} onchange={(v) => apply(m.edit_position(), set('position', v === 'static' ? [] : [v]))} />
 			</Row>
 		</Section>
 
 		<!-- Size -->
 		<Section title={m.section_size()}>
-			<Row label={m.label_width()}>
+			<Row label={m.label_width()} overridden={overridden('width')}>
 				<NumberField
 					value={Math.round(px(c.width))}
 					min={0}
@@ -401,7 +415,7 @@
 				<SelectField compact options={SIZE_MODES} value={widthMode} label={m.label_width_mode()}
 					onchange={(mode) => apply(m.edit_width(), sizeEdit('width', mode, mode === 'relative' ? 100 : relativeValue('width')))} />
 			</Row>
-			<Row label={m.label_height()}>
+			<Row label={m.label_height()} overridden={overridden('height')}>
 				<NumberField
 					value={Math.round(px(c.height))}
 					min={0}
@@ -412,7 +426,7 @@
 				<SelectField compact options={SIZE_MODES} value={heightMode} label={m.label_height_mode()}
 					onchange={(mode) => apply(m.edit_height(), sizeEdit('height', mode, mode === 'relative' ? 100 : relativeValue('height')))} />
 			</Row>
-			<Row label={m.label_min_max()}>
+			<Row label={m.label_min_max()} overridden={overridden('minWidth', 'maxWidth')}>
 				<NumberField value={c.minWidth === '0px' || c.minWidth === 'auto' ? null : Math.round(px(c.minWidth))} placeholder={m.label_min_w()} min={0}
 					oncommit={(v) => apply(m.edit_min_width(), set('minWidth', [arbitraryPx('min-w', v)]))} />
 				<NumberField value={c.maxWidth === 'none' ? null : Math.round(px(c.maxWidth))} placeholder={m.label_max_w()} min={0}
@@ -433,7 +447,7 @@
 					/>
 				</Row>
 				{#if isFlex}
-					<Row label={m.label_direction()}>
+					<Row label={m.label_direction()} overridden={overridden('direction')}>
 						<Segmented
 							iconOnly
 							options={[{ value: 'row', label: m.layout_horizontal(), icon: ArrowRight }, { value: 'col', label: m.layout_vertical(), icon: ArrowDown }]}
@@ -441,13 +455,13 @@
 							onchange={(v) => apply(m.edit_direction(), set('direction', [v === 'col' ? 'flex-col' : 'flex-row']))}
 						/>
 					</Row>
-					<Row label={m.label_distribute()}>
+					<Row label={m.label_distribute()} overridden={overridden('justify')}>
 						<SelectField options={DISTRIBUTE} value={distributeValue(c.justifyContent)} onchange={(v) => apply(m.edit_distribute(), set('justify', [`justify-${v}`]))} />
 					</Row>
-					<Row label={m.label_align()}>
+					<Row label={m.label_align()} overridden={overridden('align')}>
 						<Segmented iconOnly options={alignOptions} value={alignValue(c.alignItems)} onchange={(v) => apply(m.edit_align(), set('align', [`items-${v}`]))} />
 					</Row>
-					<Row label={m.label_wrap()}>
+					<Row label={m.label_wrap()} overridden={overridden('wrap')}>
 						<Segmented
 							options={[{ value: 'yes', label: m.yes() }, { value: 'no', label: m.no() }]}
 							value={c.flexWrap === 'wrap' ? 'yes' : 'no'}
@@ -455,7 +469,7 @@
 						/>
 					</Row>
 				{:else}
-					<Row label={m.label_columns()}>
+					<Row label={m.label_columns()} overridden={overridden('gridCols')}>
 						<NumberField
 							value={c.gridTemplateColumns === 'none' ? 1 : c.gridTemplateColumns.split(' ').length}
 							min={1}
@@ -464,7 +478,7 @@
 						/>
 					</Row>
 				{/if}
-				<Row label={m.label_gap()}>
+				<Row label={m.label_gap()} overridden={overridden('gap')}>
 					<NumberField
 						value={Math.round(px(c.rowGap === 'normal' ? 0 : vertical ? c.rowGap : c.columnGap))}
 						min={0}
@@ -475,7 +489,7 @@
 				</Row>
 			{/if}
 			{#if hasLayout || padding.top || padding.left}
-				<Row label={m.label_padding()}>
+				<Row label={m.label_padding()} overridden={overridden('padding')}>
 					{#if paddingPerSide || !uniformPadding}
 						<div class="grid w-full grid-cols-2 gap-1">
 							{#each ['top', 'right', 'bottom', 'left'] as const as side (side)}
@@ -503,12 +517,12 @@
 
 		<!-- Styles -->
 		<Section title={m.section_styles()}>
-			<Row label={m.label_opacity()}>
+			<Row label={m.label_opacity()} overridden={overridden('opacity')}>
 				<NumberField value={Number(c.opacity)} min={0} max={1} step={0.05} precision={2}
 					onpreview={(v) => preview(set('opacity', v === 1 ? [] : [opacityClass(v)]))}
 					oncommit={(v, co) => apply(m.edit_opacity(), set('opacity', v === 1 ? [] : [opacityClass(v)]), co)} />
 			</Row>
-			<Row label={m.label_visible()}>
+			<Row label={m.label_visible()} overridden={overridden('display')}>
 				<Segmented
 					options={[{ value: 'yes', label: m.yes() }, { value: 'no', label: m.no() }]}
 					value={visible ? 'yes' : 'no'}
@@ -518,7 +532,7 @@
 					}}
 				/>
 			</Row>
-			<Row label={m.label_fill()}>
+			<Row label={m.label_fill()} overridden={overridden('background')}>
 				<ColorField
 					value={c.backgroundColor}
 					token={tokenIn('background', prefixFor('background'), 'bg-')}
@@ -528,17 +542,17 @@
 					onclear={() => apply(m.edit_fill(), set('background', []))}
 				/>
 			</Row>
-			<Row label={m.label_overflow()}>
+			<Row label={m.label_overflow()} overridden={overridden('overflow')}>
 				<SelectField options={OVERFLOW} value={overflowValue} onchange={(v) => apply(m.edit_overflow(), set('overflow', v === 'visible' ? [] : [`overflow-${v}`]))} />
 			</Row>
-			<Row label={m.label_radius()}>
+			<Row label={m.label_radius()} overridden={overridden('radius')}>
 				<NumberField value={Math.round(px(c.borderRadius))} min={0}
 					onpreview={(v) => preview(set('radius', [arbitraryPx('rounded', v)]))}
 					oncommit={(v, co) => apply(m.edit_radius(), set('radius', [v === 0 ? 'rounded-none' : arbitraryPx('rounded', v)]), co)} />
 				<SelectField compact options={RADII.map((r) => ({ value: r, label: r }))} value={tokenIn('radius', prefixFor('radius'), 'rounded-') ?? null} placeholder="—"
 					onchange={(r) => apply(m.edit_radius(), set('radius', [`rounded-${r}`]))} />
 			</Row>
-			<Row label={m.label_border()}>
+			<Row label={m.label_border()} overridden={overridden('borderWidth', 'borderColor')}>
 				<NumberField value={Math.round(px(c.borderWidth))} min={0} suffix="px"
 					oncommit={(v) => apply(m.edit_border(), set('borderWidth', v === 0 ? [] : [v === 1 ? 'border' : `border-${v}`]))} />
 				<ColorField
@@ -559,21 +573,21 @@
 						<TextField value={source.text} oncommit={setText} />
 					</Row>
 				{/if}
-				<Row label={m.label_font_size()}>
+				<Row label={m.label_font_size()} overridden={overridden('fontSize')}>
 					<NumberField value={Math.round(px(c.fontSize))} min={1}
 						oncommit={(v, co) => apply(m.edit_font_size(), set('fontSize', [arbitraryPx('text', v)]), co)} />
 					<SelectField compact options={FONT_SIZES.map((s) => ({ value: s, label: s }))} value={sizeToken} placeholder="—"
 						onchange={(s) => apply(m.edit_font_size(), set('fontSize', [`text-${s}`]))} />
 				</Row>
-				<Row label={m.label_weight()}>
+				<Row label={m.label_weight()} overridden={overridden('fontWeight')}>
 					<SelectField options={WEIGHTS.map(([name, w]) => ({ value: name, label: `${name[0].toUpperCase()}${name.slice(1)} · ${w}` }))} value={weightName}
 						onchange={(w) => apply(m.edit_weight(), set('fontWeight', [`font-${w}`]))} />
 				</Row>
-				<Row label={m.label_color()}>
+				<Row label={m.label_color()} overridden={overridden('textColor')}>
 					<ColorField value={c.color} token={tokenIn('textColor', prefixFor('textColor'), 'text-')} options={textColorOptions} label={m.label_color()}
 						onchange={(choice) => apply(m.edit_text_color(), set('textColor', [colorUtility('text', choice)]))} />
 				</Row>
-				<Row label={m.label_align()}>
+				<Row label={m.label_align()} overridden={overridden('textAlign')}>
 					<Segmented
 						options={[{ value: 'left', label: m.align_left() }, { value: 'center', label: m.align_center() }, { value: 'right', label: m.align_right() }]}
 						value={['left', 'center', 'right'].includes(textAlign) ? textAlign : 'left'}
