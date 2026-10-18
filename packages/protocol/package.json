@@ -1,0 +1,13 @@
+{
+	"name": "@codesigner/protocol",
+	"private": true,
+	"version": "0.1.0",
+	"description": "Shared types for the editor, desktop shell and in-page bridge",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"check": "tsc --noEmit -p tsconfig.json"
+	}
+}

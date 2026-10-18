@@ -1,0 +1,4 @@
+[install]
+# Hoisted node_modules keep electron-builder packaging and Electron's module
+# resolution predictable (isolated installs rely on symlinks).
+linker = "hoisted"

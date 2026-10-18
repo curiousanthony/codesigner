@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+      - run: bun install --frozen-lockfile
+      - name: Install fixture dependencies
+        run: |
+          cd fixtures/kit2-app && bun install --frozen-lockfile
+          cd ../kit3-playground && bun install --frozen-lockfile
+      - name: Engine tests
+        run: cd packages/engine && bun test
+      - name: Editor tests and type check
+        run: |
+          cd apps/editor
+          bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide
+          bunx svelte-kit sync
+          bunx vitest --run
+          bunx svelte-check --tsconfig ./tsconfig.json
+      - name: Desktop type check and build
+        run: |
+          cd apps/desktop
+          bunx tsc --noEmit -p tsconfig.json
+          bunx electron-vite build

@@ -1,0 +1,169 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/*
+ * Editor chrome tokens, calibrated on Framer's 2026 editor (light theme from
+ * screenshots, dark theme measured from framer.com mockups — see
+ * docs/research/04-framer-ui-spec.md §1.9).
+ */
+:root {
+	--cd-panel: #ffffff;
+	--cd-canvas: #f2f2f2;
+	--cd-control: #f3f3f3;
+	--cd-control-hover: #ebebeb;
+	--cd-control-active: #ffffff;
+	--cd-row-hover: #f5f5f5;
+	--cd-popover: #ffffff;
+	--cd-divider: #ececec;
+	--cd-text: #111111;
+	--cd-text-strong: #000000;
+	--cd-label: #666666;
+	--cd-muted: #999999;
+	--cd-faint: #c4c4c4;
+	--cd-accent: #0099ff;
+	--cd-accent-strong: #0077ee;
+	--cd-accent-tint: rgba(0, 153, 255, 0.1);
+	--cd-accent-tint-strong: rgba(0, 153, 255, 0.2);
+	--cd-component: #8855ff;
+	--cd-component-tint: rgba(136, 85, 255, 0.1);
+	--cd-danger: #ff3b30;
+	--cd-success: #34c759;
+	--cd-warning: #ff9500;
+	--cd-shadow-popover: 0 10px 30px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+	--cd-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+	--cd-shadow-dock: 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		--cd-panel: #111111;
+		--cd-canvas: #171717;
+		--cd-control: #242424;
+		--cd-control-hover: #2b2b2b;
+		--cd-control-active: #333333;
+		--cd-row-hover: #1c1c1c;
+		--cd-popover: #1f1f1f;
+		--cd-divider: #212121;
+		--cd-text: #eeeeee;
+		--cd-text-strong: #ffffff;
+		--cd-label: #cccccc;
+		--cd-muted: #999999;
+		--cd-faint: #555555;
+		--cd-shadow-popover: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+		--cd-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.4);
+		--cd-shadow-dock: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px #212121;
+		color-scheme: dark;
+	}
+}
+
+:root[data-theme='dark'] {
+	--cd-panel: #111111;
+	--cd-canvas: #171717;
+	--cd-control: #242424;
+	--cd-control-hover: #2b2b2b;
+	--cd-control-active: #333333;
+	--cd-row-hover: #1c1c1c;
+	--cd-popover: #1f1f1f;
+	--cd-divider: #212121;
+	--cd-text: #eeeeee;
+	--cd-text-strong: #ffffff;
+	--cd-label: #cccccc;
+	--cd-muted: #999999;
+	--cd-faint: #555555;
+	--cd-shadow-popover: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+	--cd-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.4);
+	--cd-shadow-dock: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px #212121;
+	color-scheme: dark;
+}
+
+@theme inline {
+	--font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--color-panel: var(--cd-panel);
+	--color-canvas: var(--cd-canvas);
+	--color-control: var(--cd-control);
+	--color-control-hover: var(--cd-control-hover);
+	--color-control-active: var(--cd-control-active);
+	--color-row-hover: var(--cd-row-hover);
+	--color-popover: var(--cd-popover);
+	--color-divider: var(--cd-divider);
+	--color-fg: var(--cd-text);
+	--color-fg-strong: var(--cd-text-strong);
+	--color-label: var(--cd-label);
+	--color-muted: var(--cd-muted);
+	--color-faint: var(--cd-faint);
+	--color-accent: var(--cd-accent);
+	--color-accent-strong: var(--cd-accent-strong);
+	--color-accent-tint: var(--cd-accent-tint);
+	--color-accent-tint-strong: var(--cd-accent-tint-strong);
+	--color-component: var(--cd-component);
+	--color-component-tint: var(--cd-component-tint);
+	--color-danger: var(--cd-danger);
+	--color-success: var(--cd-success);
+	--color-warning: var(--cd-warning);
+	--shadow-popover: var(--cd-shadow-popover);
+	--shadow-control: var(--cd-shadow-control);
+	--shadow-dock: var(--cd-shadow-dock);
+	--radius-control: 8px;
+	--radius-popover: 13px;
+	--radius-dock: 18px;
+}
+
+@layer base {
+	html,
+	body {
+		height: 100%;
+		overflow: hidden;
+		background: var(--cd-panel);
+		color: var(--cd-text);
+		font-family: var(--font-sans);
+		font-size: 12px;
+		line-height: 1.2;
+		font-weight: 450;
+		font-feature-settings:
+			'cv01' on,
+			'cv05' on,
+			'cv09' on,
+			'cv11' on;
+		-webkit-font-smoothing: antialiased;
+		user-select: none;
+		-webkit-user-select: none;
+		cursor: default;
+	}
+
+	input,
+	textarea,
+	[contenteditable] {
+		user-select: text;
+		-webkit-user-select: text;
+	}
+
+	button {
+		cursor: default;
+	}
+
+	:focus-visible {
+		outline: 1.5px solid var(--cd-accent);
+		outline-offset: -1.5px;
+	}
+
+	::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+	::-webkit-scrollbar-thumb {
+		background: transparent;
+		border-radius: 4px;
+	}
+	:hover::-webkit-scrollbar-thumb {
+		background: color-mix(in srgb, var(--cd-muted) 40%, transparent);
+	}
+}
+
+/* Electron: draggable title bar regions */
+.drag {
+	-webkit-app-region: drag;
+}
+.no-drag {
+	-webkit-app-region: no-drag;
+}

@@ -1,0 +1,26 @@
+node_modules/
+.DS_Store
+Thumbs.db
+
+# Build output
+dist/
+out/
+build/
+release/
+.svelte-kit/
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Vite
+vite.config.*.timestamp-*
+
+# Paraglide (generated)
+apps/editor/src/lib/paraglide/
+apps/editor/project.inlang/cache/
+
+# Codesigner runtime files inside fixture projects
+fixtures/*/.codesigner/cache/

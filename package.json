@@ -1,0 +1,20 @@
+{
+	"name": "codesigner",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "bun run --filter '@codesigner/desktop' dev",
+		"build": "bun run --filter '*' build",
+		"test": "bun run --cwd packages/engine test && bun run --cwd apps/editor test",
+		"check": "bun run --cwd packages/protocol check && bun run --cwd packages/engine check && bun run --cwd apps/editor check && bun run --cwd apps/desktop check",
+		"postinstall": "node node_modules/electron/install.js"
+	},
+	"trustedDependencies": [
+		"electron",
+		"esbuild"
+	]
+}

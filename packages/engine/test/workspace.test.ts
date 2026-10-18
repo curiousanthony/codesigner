@@ -1,0 +1,200 @@
+import { afterAll, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Workspace } from '../src/workspace';
+import { locOf, tempProject } from './helpers';
+
+const PAGE = 'src/routes/test/+page.svelte';
+const SOURCE = `<script lang="ts">
+	import Child from './child.svelte';
+	let { active = false, className = '' } = $props();
+</script>
+
+<!-- A comment that must survive -->
+<div class="flex flex-col gap-1">
+	<p class="text-sm  text-muted-foreground">Hello world</p>
+	<span class={cn('px-2', active && 'mt-1')}>Badge</span>
+	<section class="flex gap-1 {active ? 'p-2' : ''}">Mixed</section>
+	<em>No class</em>
+	<b class={className}>Dynamic</b>
+	<Child variant="outline" />
+	<Child />
+</div>
+`;
+
+const project = tempProject('kit2-app', { [PAGE]: SOURCE, 'src/routes/test/child.svelte': '<button>child</button>' });
+afterAll(project.cleanup);
+const ws = new Workspace(project.dir);
+const read = () => readFileSync(join(project.dir, PAGE), 'utf8');
+const at = (needle: string) => locOf(read(), needle, PAGE);
+
+describe('classes', () => {
+	test('replaces a conflicting class in place', async () => {
+		const result = await ws.apply({ label: 'gap', ops: [{ type: 'classes', target: at('<div class'), remove: [], add: ['gap-3'] }] });
+		expect(result.ok).toBe(true);
+		expect(read()).toContain('<div class="flex flex-col gap-3">');
+		expect(read()).toContain('<!-- A comment that must survive -->');
+	});
+
+	test('canonicalizes arbitrary values to the theme scale', async () => {
+		await ws.apply({ label: 'gap', ops: [{ type: 'classes', target: at('<div class'), remove: [], add: ['gap-[16px]'] }] });
+		expect(read()).toContain('<div class="flex flex-col gap-4">');
+	});
+
+	test('keeps irregular whitespace and inserts in Tailwind order', async () => {
+		await ws.apply({ label: 'weight', ops: [{ type: 'classes', target: at('<p class'), remove: [], add: ['font-medium'] }] });
+		expect(read()).toContain('<p class="text-sm  font-medium text-muted-foreground">');
+	});
+
+	test('edits the unconditional literal inside cn()', async () => {
+		await ws.apply({ label: 'padding', ops: [{ type: 'classes', target: at('<span'), remove: [], add: ['p-4'] }] });
+		expect(read()).toContain("<span class={cn('p-4', active && 'mt-1')}>");
+	});
+
+	test('edits static text of a mixed attribute without touching the expression', async () => {
+		await ws.apply({ label: 'align', ops: [{ type: 'classes', target: at('<section'), remove: [], add: ['items-center'] }] });
+		expect(read()).toContain(`<section class="flex items-center gap-1 {active ? 'p-2' : ''}">`);
+	});
+
+	test('adds a class attribute when missing', async () => {
+		await ws.apply({ label: 'size', ops: [{ type: 'classes', target: at('<em>'), remove: [], add: ['text-xs'] }] });
+		expect(read()).toContain('<em class="text-xs">No class</em>');
+	});
+
+	test('wraps dynamic expressions in a clsx array', async () => {
+		await ws.apply({ label: 'mt', ops: [{ type: 'classes', target: at('<b class'), remove: [], add: ['mt-2'] }] });
+		expect(read()).toContain("<b class={[className, 'mt-2']}>Dynamic</b>");
+	});
+
+	test('removes classes and keeps the attribute tidy', async () => {
+		await ws.apply({ label: 'rm', ops: [{ type: 'classes', target: at('<p class'), remove: ['font-medium'], add: [] }] });
+		expect(read()).toContain('<p class="text-sm  text-muted-foreground">');
+	});
+
+	test('sets classes on component instances', async () => {
+		await ws.apply({ label: 'w', ops: [{ type: 'classes', target: at('<Child variant'), remove: [], add: ['w-full'] }] });
+		expect(read()).toContain('<Child variant="outline" class="w-full" />');
+	});
+});
+
+describe('structure', () => {
+	test('edits static text', async () => {
+		const result = await ws.apply({ label: 'text', ops: [{ type: 'text', target: at('<p class'), text: 'Hi {there} <you>' }] });
+		expect(result.ok).toBe(true);
+		expect(read()).toContain(`>Hi {'{'}there{'}'} &lt;you></p>`);
+	});
+
+	test('sets a prop', async () => {
+		await ws.apply({ label: 'variant', ops: [{ type: 'attribute', target: at('<Child variant'), name: 'variant', value: 'secondary' }] });
+		expect(read()).toContain('<Child variant="secondary" class="w-full" />');
+	});
+
+	test('wraps siblings in a stack with correct indentation', async () => {
+		const result = await ws.apply({
+			label: 'Wrap in Stack',
+			ops: [{ type: 'wrap', targets: [at('<span'), at('<section')], tag: 'div', className: 'flex flex-col gap-2' }]
+		});
+		expect(result.ok).toBe(true);
+		expect(read()).toContain(
+			`\t<div class="flex flex-col gap-2">\n\t\t<span class={cn('p-4', active && 'mt-1')}>Badge</span>\n\t\t<section class="flex items-center gap-1 {active ? 'p-2' : ''}">Mixed</section>\n\t</div>\n`
+		);
+	});
+
+	test('rejects wrapping layers with different parents', async () => {
+		const result = await ws.apply({ label: 'bad', ops: [{ type: 'wrap', targets: [at('<div class'), at('<em')], tag: 'div', className: '' }] });
+		expect(result.ok).toBe(false);
+	});
+
+	test('duplicates and removes', async () => {
+		await ws.apply({ label: 'dup', ops: [{ type: 'duplicate', targets: [at('<em')] }] });
+		expect(read().match(/<em class="text-xs">No class<\/em>/g)?.length).toBe(2);
+		await ws.apply({ label: 'rm', ops: [{ type: 'remove', targets: [at('<em')] }] });
+		expect(read().match(/<em class="text-xs">No class<\/em>/g)?.length).toBe(1);
+		expect(read()).not.toMatch(/\n\t*\n\t*<b/);
+	});
+
+	test('inserts a new stack as a child', async () => {
+		await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: at('<div class'), index: -1, markup: '<div class="flex flex-col gap-2"></div>' }] });
+		expect(read()).toContain('\t<Child />\n\t<div class="flex flex-col gap-2"></div>\n</div>');
+	});
+});
+
+describe('history', () => {
+	test('undo and redo restore exact bytes', async () => {
+		const before = read();
+		await ws.apply({ label: 'gap', ops: [{ type: 'classes', target: at('<div class'), remove: [], add: ['gap-8'] }] });
+		const after = read();
+		expect(after).not.toBe(before);
+		ws.undo();
+		expect(read()).toBe(before);
+		ws.redo();
+		expect(read()).toBe(after);
+	});
+
+	test('coalesces scrubbing into one undo step', async () => {
+		const before = read();
+		for (const g of ['gap-5', 'gap-6', 'gap-7']) {
+			await ws.apply({ label: 'Gap', coalesce: true, ops: [{ type: 'classes', target: at('<div class'), remove: [], add: [g] }] });
+		}
+		expect(read()).toContain('gap-7');
+		ws.undo();
+		expect(read()).toBe(before);
+	});
+
+	test('resolves locations from the version the page is still showing', async () => {
+		const stale = { ...at('<em'), tag: 'em' };
+		// Insert a line above, shifting <em> down; the page hasn't reloaded yet.
+		await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: at('<div class'), index: 0, markup: '<hr />' }] });
+		const result = await ws.apply({ label: 'size', ops: [{ type: 'classes', target: stale, remove: [], add: ['text-lg'] }] });
+		expect(result.ok).toBe(true);
+		expect(read()).toContain('<em class="text-lg">No class</em>');
+	});
+
+	test('refuses undo after an external edit', async () => {
+		await ws.apply({ label: 'gap', ops: [{ type: 'classes', target: at('<div class'), remove: [], add: ['gap-2'] }] });
+		const { writeFileSync } = await import('node:fs');
+		writeFileSync(join(project.dir, PAGE), read() + '\n<!-- agent edit -->\n');
+		expect(() => ws.undo()).toThrow();
+	});
+});
+
+describe('tokens and components', () => {
+	test('edits one token line', () => {
+		const css = readFileSync(join(project.dir, 'src/app.css'), 'utf8');
+		const tokens = ws.editToken({ name: '--primary', value: 'oklch(0.5 0.2 30)', scope: 'light' });
+		const next = readFileSync(join(project.dir, 'src/app.css'), 'utf8');
+		const diff = next.split('\n').filter((line, i) => line !== css.split('\n')[i]);
+		expect(diff).toEqual(['\t--primary: oklch(0.5 0.2 30);']);
+		const primary = tokens.tokens.find((t) => t.name === '--primary')!;
+		expect(primary.value).toBe('oklch(0.5 0.2 30)');
+		expect(primary.darkAlias).toBe('--brand-500');
+		expect(primary.type).toBe('color');
+		expect(tokens.darkSelector).toBe('.dark');
+	});
+
+	test('extracts props and tv() variants', () => {
+		const components = ws.components();
+		const button = components.find((c) => c.file.endsWith('ui/button/button.svelte'))!;
+		expect(button.variants.map((v) => v.name)).toEqual(['variant', 'size']);
+		expect(button.variants[0].options).toContain('outline');
+		expect(button.variants[0].default).toBe('default');
+		expect(button.exportedAs).toContain('Button');
+		const nav = components.find((c) => c.file.endsWith('nav-item.svelte'))!;
+		expect(nav.props.map((p) => p.name)).toEqual(['href', 'text', 'icon', 'variant', 'badge', 'class']);
+		expect(nav.props.find((p) => p.name === 'text')!.control).toBe('text');
+		expect(nav.variants[0].options).toEqual(['normal', 'active']);
+	});
+});
+
+describe('inspect', () => {
+	test('describes attributes, class form and text', () => {
+		const info = ws.inspect({ ...at('<Child variant'), tag: 'Child' })!;
+		expect(info.isComponent).toBe(true);
+		expect(info.attributes.find((a) => a.name === 'variant')).toEqual({ name: 'variant', kind: 'string', value: 'secondary' });
+		const span = ws.inspect(at('<span'))!;
+		expect(span.classForm).toBe('call');
+		expect(span.staticClasses).toEqual(['p-4']);
+		expect(span.dynamicClasses).toEqual(["active && 'mt-1'"]);
+		expect(span.text).toBe('Badge');
+	});
+});

@@ -1,0 +1,28 @@
+{
+	"name": "@codesigner/engine",
+	"private": true,
+	"version": "0.1.0",
+	"description": "Node-side engine: project detection, routes, Svelte source edits, Tailwind and design tokens",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "bun test",
+		"check": "tsc --noEmit -p tsconfig.json"
+	},
+	"dependencies": {
+		"@codesigner/protocol": "workspace:*",
+		"@tailwindcss/node": "4.3.3",
+		"magic-string": "^1.4.3",
+		"postcss": "^8.5.30",
+		"svelte": "^5.57.2",
+		"tailwind-merge": "^3.7.0",
+		"tailwindcss": "4.3.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.4.3",
+		"@types/node": "^24",
+		"typescript": "~6.0.3"
+	}
+}
