@@ -3,6 +3,7 @@
  * Kit 2 fixture, logs in inside the canvas, selects layers and edits styles.
  * Run: node e2e/smoke.ts  (requires the editor dev server on :5199)
  */
+import { nativeShot } from './capture.ts';
 import { _electron as electron, type Page } from 'playwright-core';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -27,7 +28,7 @@ const log = (...args: unknown[]) => console.log('[e2e]', ...args);
 const page: Page = await app.firstWindow();
 page.on('console', (msg) => msg.type() === 'error' && log('console error:', msg.text()));
 await page.waitForFunction(() => (window as any).__editor !== undefined);
-const shot = (name: string) => page.screenshot({ path: join(shots, `${name}.png`) });
+const shot = (name: string) => nativeShot(app, join(shots, `${name}.png`));
 await shot('01-welcome');
 
 await page.evaluate((root) => (window as any).__editor.openProject(root), project);

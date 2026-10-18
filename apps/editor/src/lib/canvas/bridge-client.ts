@@ -57,10 +57,12 @@ export class BridgeClient {
 	}
 
 	send(message: HostToGuest) {
+		// Messages often carry $state proxies, which structured clone rejects: send plain data.
+		const plain = JSON.parse(JSON.stringify(message)) as HostToGuest;
 		try {
-			this.webview.send(BRIDGE_CHANNEL, message);
-		} catch {
-			// webview not attached yet
+			this.webview.send(BRIDGE_CHANNEL, plain);
+		} catch (error) {
+			if (!String(error).includes('attached')) console.warn('[bridge] send failed', message.type, error);
 		}
 	}
 

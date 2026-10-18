@@ -5,6 +5,7 @@
  * navigates, selects layers, applies one edit and undoes it.
  * Run: TARGET=/path/to/app [PAGE=/some/route] node e2e/real-app.ts
  */
+import { nativeShot } from './capture.ts';
 import { _electron as electron, type Page } from 'playwright-core';
 import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -30,7 +31,7 @@ const app = await electron.launch({
 const page: Page = await app.firstWindow();
 page.on('console', (msg) => msg.type() === 'error' && log('console error:', msg.text().slice(0, 200)));
 await page.waitForFunction(() => (window as any).__editor !== undefined);
-const shot = (name: string) => page.screenshot({ path: join(shots, `${name}.png`) });
+const shot = (name: string) => nativeShot(app, join(shots, `${name}.png`));
 const E = <T>(fn: string) => page.evaluate(`(async () => { const e = window.__editor; ${fn} })()`) as Promise<T>;
 
 const t0 = Date.now();
