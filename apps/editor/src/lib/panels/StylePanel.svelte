@@ -37,6 +37,7 @@
 		parseToken,
 		px,
 		responsiveSet,
+		setFamily,
 		sizeClasses,
 		sizeMode,
 		spacing,
@@ -46,6 +47,7 @@
 	} from '#lib/style/tailwind-map.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { breakpointLabel } from '#lib/canvas/breakpoints.js';
+	import { STATE_LABELS, STATE_PREFIX } from '#lib/state/component-canvas.js';
 
 	const info = $derived(editor.selected);
 	const multi = $derived(editor.selection.infos.length > 1);
@@ -85,10 +87,17 @@
 	const hasLayout = $derived(isFlex || isGrid);
 	const vertical = $derived(!!c && c.flexDirection.startsWith('column'));
 	const isTextLike = $derived(!!info && (info.textEditable || /^(h[1-6]|p|span|label|a|button|li|strong|em|small)$/.test(info.tag) || !!source?.text));
-	const prefixFor = (family: Family) => activePrefix(cls, family, frameWidth);
+	/** On the component canvas, a cell's root edits its variant (and state) in the tv() config. */
+	const variantContext = $derived(editor.editingComponent && info?.context ? info.context : null);
+	const statePrefix = $derived(variantContext?.state ? (STATE_PREFIX[variantContext.state as keyof typeof STATE_PREFIX] ?? '') : '');
+	const prefixFor = (family: Family) => (variantContext ? statePrefix : activePrefix(cls, family, frameWidth));
 
 	// ------------------------------------------------------------ apply
 	function ops(edit: ClassEdit): EditOp[] {
+		if (variantContext && editor.editingComponent) {
+			const { state: _state, ...context } = variantContext;
+			return [{ type: 'variant-classes', file: editor.editingComponent.component.file, context, remove: edit.remove, add: edit.add }];
+		}
 		return editor.selection.infos
 			.filter((i): i is ElementInfo & { loc: NonNullable<ElementInfo['loc']> } => !!i.loc && i.editable)
 			.map((i) => ({ type: 'classes', target: { ...i.loc, tag: i.componentTag ?? i.tag }, remove: edit.remove, add: edit.add }));
@@ -96,13 +105,14 @@
 
 	async function apply(label: string, edit: ClassEdit, coalesce = false) {
 		if (edit.add.length === 0 && edit.remove.length === 0) return;
-		void editor.previewClasses(edit.remove, edit.add);
+		// Variant cells share one source location: a preview would restyle every cell.
+		if (!variantContext) void editor.previewClasses(edit.remove, edit.add);
 		const ok = await editor.edit(label, ops(edit), { coalesce });
 		if (!ok) editor.clearPreview();
 	}
 
 	function preview(edit: ClassEdit) {
-		void editor.previewClasses(edit.remove, edit.add);
+		if (!variantContext) void editor.previewClasses(edit.remove, edit.add);
 	}
 
 	const frameWidths = $derived(editor.breakpoints.map((b) => b.width));
@@ -112,7 +122,8 @@
 	const overridden = (...families: Family[]) =>
 		frameWidth !== primaryWidth && families.some((f) => activePrefix(cls, f, frameWidth) !== activePrefix(cls, f, primaryWidth));
 	// Framer semantics: edits apply to this breakpoint and the smaller ones inheriting from it.
-	const set = (family: Family, utilities: string[]) => responsiveSet(cls, family, utilities, frameWidth, frameWidths);
+	const set = (family: Family, utilities: string[]) =>
+		variantContext ? setFamily(cls, family, utilities, statePrefix) : responsiveSet(cls, family, utilities, frameWidth, frameWidths);
 
 	// ------------------------------------------------------------ size
 	const widthMode = $derived<SizeMode>(c ? sizeMode(cls, 'width', c.parentDisplay, c.parentFlexDirection, frameWidth) : 'auto');
@@ -283,9 +294,20 @@
 	}
 
 	function editComponent() {
-		if (!info?.definitionFile) return;
-		editor.setScope([...new Set([...editor.scope, info.definitionFile])]);
-		editor.toast(m.component_editing({ name: info.componentTag ?? '' }));
+		if (component) void editor.editComponent(component);
+		else if (info?.definitionFile) editor.setScope([...new Set([...editor.scope, info.definitionFile])]);
+	}
+
+	// ------------------------------------------------- component canvas
+	let newVariant = $state('');
+	const canvasComponent = $derived(editor.editingComponent?.component ?? null);
+	const mainAxis = $derived(canvasComponent?.variants.find((g) => g.name === 'variant') ?? canvasComponent?.variants[0] ?? null);
+	function addVariant(event: SubmitEvent) {
+		event.preventDefault();
+		const value = newVariant.trim().replace(/\s+/g, '-');
+		if (!value || !mainAxis) return;
+		newVariant = '';
+		void editor.addVariant(mainAxis.name, value);
 	}
 
 	/** Shows the selected layer in the code panel (it follows the selection and highlights the tag). */
@@ -294,6 +316,30 @@
 		editor.codeOpen = true;
 	}
 </script>
+
+{#if canvasComponent}
+	<div class="border-b border-divider px-4 py-3">
+		<div class="flex items-center gap-2">
+			<Component class="size-3.5 text-component" />
+			<span class="flex-1 truncate font-semibold text-component">{canvasComponent.name}</span>
+			<button type="button" class="rounded-control px-2 py-1 text-label hover:bg-control" onclick={() => editor.exitComponent()}>{m.component_done()}</button>
+		</div>
+		{#if variantContext}
+			<p class="mt-2 rounded-control bg-component-tint px-2.5 py-1.5 text-component">
+				{m.component_editing_variant({
+					variant: Object.entries(variantContext).filter(([k]) => k !== 'state').map(([k, v]) => `${k}=${v}`).join(', ') || m.component_default(),
+					state: variantContext.state ? STATE_LABELS[variantContext.state as keyof typeof STATE_LABELS] : m.component_state_default()
+				})}
+			</p>
+		{/if}
+		{#if mainAxis}
+			<form class="mt-2 flex items-center gap-1.5" onsubmit={addVariant}>
+				<input class="h-[28px] min-w-0 flex-1 rounded-control bg-control px-2 outline-none placeholder:text-muted" placeholder={m.component_new_variant({ axis: mainAxis.name })} bind:value={newVariant} />
+				<button type="submit" class="h-[28px] rounded-control bg-component px-2.5 font-medium text-white disabled:opacity-50" disabled={!newVariant.trim()}>{m.component_add_variant()}</button>
+			</form>
+		{/if}
+	</div>
+{/if}
 
 {#if !info}
 	<div class="flex flex-col items-center gap-2 px-6 py-12 text-center text-muted">
@@ -317,7 +363,7 @@
 				</button>
 			{/if}
 		</div>
-		{#if info.repeatCount > 1}
+		{#if info.repeatCount > 1 && !variantContext}
 			<span class="flex items-center gap-1 rounded bg-control px-1.5 py-0.5 text-[10px] text-label" title={m.style_repeated_hint()}>
 				<Repeat class="size-3" />×{info.repeatCount}
 			</span>
@@ -334,7 +380,7 @@
 		</div>
 	{/if}
 
-	{#if source && source.dynamicClasses.length > 0}
+	{#if source && source.dynamicClasses.length > 0 && !variantContext}
 		<div class="mx-3 mt-3 rounded-control bg-control p-2 text-[11px] text-label">
 			<p class="mb-1 font-medium text-fg">{m.style_dynamic_classes()}</p>
 			{#each source.dynamicClasses as part (part)}
@@ -519,7 +565,7 @@
 		<!-- Styles -->
 		<Section title={m.section_styles()}>
 			<Row label={m.label_opacity()} overridden={overridden('opacity')}>
-				<NumberField value={Number(c.opacity)} min={0} max={1} step={0.05} precision={2}
+				<NumberField value={Number(c.opacity)} min={0} max={1} step={0.05} precision={2} label={m.label_opacity()}
 					onpreview={(v) => preview(set('opacity', v === 1 ? [] : [opacityClass(v)]))}
 					oncommit={(v, co) => apply(m.edit_opacity(), set('opacity', v === 1 ? [] : [opacityClass(v)]), co)} />
 			</Row>

@@ -180,14 +180,14 @@
 
 			<div class="flex min-w-0 flex-1 flex-col">
 				<main class="relative min-h-0 flex-1">
-					{#if editor.scope.length > 1}
+					{#if editor.editingComponent || editor.scope.length > 1}
 						<div class="absolute top-3 left-3 z-40 flex items-center gap-1.5 rounded-control bg-panel px-1.5 py-1 shadow-control">
-							<button type="button" class="rounded-[6px] px-2 py-1 hover:bg-control" onclick={() => editor.setScope(['src/routes/'])}>
+							<button type="button" class="rounded-[6px] px-2 py-1 hover:bg-control" onclick={() => (editor.editingComponent ? editor.exitComponent() : editor.setScope(['src/routes/']))}>
 								{editor.currentTitle || m.breadcrumb_page()}
 							</button>
 							<span class="text-muted">›</span>
 							<span class="rounded-[6px] bg-component-tint px-2 py-1 font-medium text-component">
-								{editor.scope.at(-1)?.split('/').at(-1)?.replace('.svelte', '')}
+								{editor.editingComponent?.component.name ?? editor.scope.at(-1)?.split('/').at(-1)?.replace('.svelte', '')}
 							</span>
 						</div>
 					{/if}

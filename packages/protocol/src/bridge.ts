@@ -112,6 +112,8 @@ export interface ElementInfo {
 	childCount: number;
 	/** data-slot attribute used by shadcn-svelte components. */
 	slot: string | null;
+	/** On the component canvas: the variant values (and `state`) of the cell this element is the root of. */
+	context?: Record<string, string> | null;
 }
 
 /** A node of the layer tree sent to the host. */

@@ -3,6 +3,7 @@
 	import type { Breakpoint, GuestToHost, NodeId } from '@codesigner/protocol';
 	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
 	import { editor } from '#lib/state/editor.svelte.js';
+	import { invoke } from '#lib/api.js';
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
 	import { m } from '#lib/paraglide/messages.js';
@@ -32,6 +33,23 @@
 	const frameId = $derived(breakpoint.id);
 	const scale = $derived(editor.camera.scale);
 	const isPrimary = $derived(breakpoint.primary ?? false);
+	/** Framer's component canvas: variants and states of one component. */
+	const isComponentCanvas = $derived(frameId === 'component');
+
+	// Hover / Pressed cells: force the pseudo-classes on each cell's root (re-applied after every DOM change).
+	let forceTimer: ReturnType<typeof setTimeout> | null = null;
+	function forceStates() {
+		if (forceTimer) clearTimeout(forceTimer);
+		forceTimer = setTimeout(() => {
+			const id = webview?.getWebContentsId?.();
+			if (!id) return;
+			void invoke('canvas:force-states', id, [
+				{ selector: '[data-codesigner-state="hover"] > *', states: ['hover'] },
+				{ selector: '[data-codesigner-state="active"] > *', states: ['hover', 'active'] },
+				{ selector: '[data-codesigner-state="focus"] > *', states: ['focus', 'focus-visible'] }
+			]);
+		}, 150);
+	}
 	const designMode = $derived(editor.mode === 'design' && editor.effectiveTool === 'select');
 	const selectedRects = $derived(editor.selectedRects[frameId] ?? {});
 	const selectedComponent = $derived(editor.selected?.kind === 'instance');
@@ -53,6 +71,7 @@
 			case 'tree':
 				if (message.root?.children.length) svelteDev = true;
 				editor.setTree(frameId, message.root);
+				if (isComponentCanvas) forceStates();
 				break;
 			case 'rects':
 				editor.setRects(frameId, message.hover, message.selected);
@@ -236,7 +255,7 @@
 	>
 		<div
 			class="flex h-7 items-center gap-2 rounded-[10px] px-1 text-[12px]
-				{editor.activeFrameId === frameId ? 'bg-accent-tint text-accent' : 'bg-black/[0.04] text-label dark:bg-white/[0.05]'}"
+				{isComponentCanvas ? 'bg-component-tint text-component' : editor.activeFrameId === frameId ? 'bg-accent-tint text-accent' : 'bg-black/[0.04] text-label dark:bg-white/[0.05]'}"
 		>
 			<button
 				type="button"
@@ -248,9 +267,13 @@
 				<Play class="size-3" />
 			</button>
 			<button type="button" class="flex min-w-0 items-center gap-2" onclick={() => (editor.activeFrameId = frameId)}>
-				<span class="font-semibold {editor.activeFrameId === frameId ? 'text-accent' : 'text-fg'}">{label}</span>
-				<span class="tabular-nums">{breakpoint.width}</span>
-				{#if isPrimary}<span class="text-muted">{m.frame_primary()}</span>{/if}
+				<span class="font-semibold {isComponentCanvas ? 'text-component' : editor.activeFrameId === frameId ? 'text-accent' : 'text-fg'}">{label}</span>
+				{#if isComponentCanvas}
+					<span class="opacity-70">{m.component_canvas_label()}</span>
+				{:else}
+					<span class="tabular-nums">{breakpoint.width}</span>
+					{#if isPrimary}<span class="text-muted">{m.frame_primary()}</span>{/if}
+				{/if}
 			</button>
 			<span class="flex-1"></span>
 			{#if loading && !loadError}
@@ -265,6 +288,7 @@
 			>
 				<RotateCw class="size-3" />
 			</button>
+			{#if !isComponentCanvas}
 			<button
 				type="button"
 				class="flex size-5 items-center justify-center rounded-[5px] hover:bg-black/5 {menu === 'more' ? 'bg-black/5' : ''}"
@@ -285,6 +309,7 @@
 			>
 				<Plus class="size-3" />
 			</button>
+			{/if}
 		</div>
 
 		{#if menu}

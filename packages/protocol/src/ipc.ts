@@ -46,6 +46,10 @@ export interface InvokeMap {
 	'project:components': (worktree: string) => ComponentInfo[];
 	'project:reveal': (path: string) => void;
 	'project:open-in-editor': (file: string, line?: number, column?: number) => void;
+	/** Writes the component canvas route into the working copy (git-ignored); returns its URL path. */
+	'canvas:ensure-isolation': (worktree: string) => string;
+	/** Forces :hover / :active / :focus-visible on elements of a canvas frame (DevTools protocol). */
+	'canvas:force-states': (webContentsId: number, rules: { selector: string; states: string[] }[]) => boolean;
 
 	'branch:list': (root: string) => DesignBranch[];
 	'branch:create': (root: string, name: string, from?: string) => DesignBranch;
@@ -99,6 +103,8 @@ export const INVOKE_CHANNELS = [
 	'project:components',
 	'project:reveal',
 	'project:open-in-editor',
+	'canvas:ensure-isolation',
+	'canvas:force-states',
 	'branch:list',
 	'branch:create',
 	'branch:checkpoint',

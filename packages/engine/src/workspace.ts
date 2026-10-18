@@ -22,6 +22,7 @@ import { SvelteDoc, type ElementLike, type Located } from './svelte/doc.js';
 import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
 import { EditError, duplicate, insert, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
+import { addVariantValue, editVariantClasses } from './svelte/variants.js';
 import { applyTokenEdit, parseTokens } from './tokens.js';
 import { scanComponents } from './components.js';
 import { detectProject } from './project.js';
@@ -140,6 +141,9 @@ export class Workspace {
 				return 'root' in op.parent ? [] : [op.parent];
 			case 'move':
 				return [op.target, op.parent];
+			case 'variant-classes':
+			case 'add-variant':
+				return [];
 			default:
 				return [op.target];
 		}
@@ -147,6 +151,7 @@ export class Workspace {
 
 	private fileOf(op: EditOp): string {
 		if (op.type === 'insert') return op.parent.file;
+		if (op.type === 'variant-classes' || op.type === 'add-variant') return op.file;
 		const targets = this.targetsOf(op);
 		const files = new Set(targets.map((t) => t.file));
 		if (files.size !== 1) throw new EditError('All layers in one edit must come from the same file');
@@ -164,6 +169,14 @@ export class Workspace {
 				warnings.push(...result.warnings);
 				break;
 			}
+			case 'variant-classes': {
+				const tw = (await this.tailwind.load()) ? this.tailwind : null;
+				warnings.push(...editVariantClasses(doc, s, op, tw).warnings);
+				break;
+			}
+			case 'add-variant':
+				addVariantValue(doc, s, op.axis, op.value, op.copyFrom);
+				break;
 			case 'text':
 				setText(doc, s, this.locate(doc, op.target).node, op.text);
 				break;

@@ -133,7 +133,7 @@
 					</button>
 					<FrameIcon class="size-3 shrink-0 {active ? 'text-white' : 'text-label'}" strokeWidth={1.75} />
 					<span class="min-w-0 flex-1 truncate font-medium">{breakpointLabel(row.bp)}</span>
-					<span class="shrink-0 tabular-nums {active ? 'text-white/70' : 'text-muted'}">{row.bp.width}</span>
+					<span class="shrink-0 tabular-nums {active ? 'text-white/70' : 'text-muted'}">{editor.editingComponent ? m.component_canvas_label() : row.bp.width}</span>
 				</div>
 			{:else}
 				{@const node = row.node}
@@ -183,7 +183,7 @@
 						<LayerIcon kind={node.kind} />
 					</span>
 					<span class="min-w-0 flex-1 truncate {node.isInstance && !primarySelection ? 'text-component' : ''}">{node.name}</span>
-					{#if node.repeatCount > 1}
+					{#if node.repeatCount > 1 && !editor.editingComponent}
 						<span
 							class="shrink-0 rounded px-1 text-[10px] tabular-nums {primarySelection ? 'bg-white/20' : 'bg-control text-label'}"
 							title={m.layers_repeated({ count: node.repeatCount })}

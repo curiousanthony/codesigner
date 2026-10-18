@@ -213,7 +213,26 @@ export function bridgeMain(config: BridgeConfig) {
 		hr: 'Divider'
 	};
 
+	/** The component-canvas cell (variant × state) an element is the root of, if any. */
+	const cellOf = (el: Element): HTMLElement | null => {
+		const parent = el.parentElement;
+		return parent?.hasAttribute('data-codesigner-context') ? parent : null;
+	};
+	const cellContext = (el: Element): Record<string, string> | null => {
+		const cell = cellOf(el);
+		if (!cell) return null;
+		try {
+			const context = JSON.parse(cell.getAttribute('data-codesigner-context') ?? '{}') as Record<string, string>;
+			const state = cell.getAttribute('data-codesigner-state');
+			return state ? { ...context, state } : context;
+		} catch {
+			return null;
+		}
+	};
+
 	const nameOf = (el: Element, layer: Layer, kind: LayerKind): string => {
+		const label = cellOf(el)?.getAttribute('data-codesigner-label');
+		if (label) return label;
 		if (layer.kind === 'instance') return layer.tag;
 		const tag = el.localName;
 		const text = directText(el);
@@ -365,7 +384,8 @@ export function bridgeMain(config: BridgeConfig) {
 			editable: !!layer,
 			readonlyReason: layer ? null : meta ? 'Rendered outside your source files' : 'No source information',
 			childCount: rec?.children.length ?? el.children.length,
-			slot: el.getAttribute('data-slot')
+			slot: el.getAttribute('data-slot'),
+			context: cellContext(el)
 		};
 	};
 

@@ -23,6 +23,7 @@ import { errorMessage, inDesktop, invoke, on } from '#lib/api.js';
 import type { BridgeClient } from '#lib/canvas/bridge-client.js';
 import { parentOf, pickLayer } from '#lib/canvas/selection.js';
 import { buildUrl, matchRoute } from './routes';
+import { buildCanvasSpec, type CanvasSpec } from './component-canvas';
 
 export type LeftTab = 'pages' | 'layers' | 'assets';
 export type RightTab = 'agent' | 'style';
@@ -90,6 +91,9 @@ class EditorState {
 	/** Files that the editor scopes selection to (routes by default; a component file when editing it). */
 	scope = $state<string[]>(['src/routes/']);
 
+	/** Component canvas (Framer's "Edit component"): the component's variants and states, isolated. */
+	editingComponent = $state<{ component: ComponentInfo; spec: CanvasSpec; path: string } | null>(null);
+
 	/** Code panel under the canvas. */
 	codeOpen = $state(false);
 	codeHeight = $state(320);
@@ -108,7 +112,20 @@ class EditorState {
 	private editChain: Promise<unknown> = Promise.resolve();
 
 	get breakpoints(): Breakpoint[] {
+		if (this.editingComponent) {
+			// Tall enough to show every row of the component canvas (~96px per row) without scrolling.
+			const height = Math.min(4000, Math.max(640, 200 + this.editingComponent.spec.sections.length * 96));
+			return [{ id: 'component', name: this.editingComponent.component.name, width: 1200, height, primary: true }];
+		}
 		return this.project?.settings.breakpoints ?? [];
+	}
+
+	/** What the canvas frames load: the current page, or the component canvas. */
+	get canvasUrl(): string | null {
+		if (!this.devServer?.url) return null;
+		if (!this.editingComponent) return this.frameUrl();
+		const { path, spec } = this.editingComponent;
+		return new URL(`${path}?spec=${encodeURIComponent(JSON.stringify(spec))}`, this.devServer.url).toString();
 	}
 
 	get primaryFrameId(): string | null {
@@ -283,6 +300,46 @@ class EditorState {
 		void invoke('devserver:stop', worktree).then(() => invoke('devserver:start', worktree));
 	}
 
+	// ------------------------------------------------- component canvas
+	async editComponent(component: ComponentInfo) {
+		if (!this.worktree) return;
+		try {
+			const path = await invoke('canvas:ensure-isolation', this.worktree);
+			this.selection = EMPTY_SELECTION;
+			this.mirrors = {};
+			this.trees = {};
+			this.hover = null;
+			this.scope = [component.file];
+			this.editingComponent = { component, spec: buildCanvasSpec(component), path };
+			this.leftTab = 'layers';
+		} catch (error) {
+			this.toast(errorMessage(error), 'error');
+		}
+	}
+
+	exitComponent() {
+		if (!this.editingComponent) return;
+		this.editingComponent = null;
+		this.selection = EMPTY_SELECTION;
+		this.mirrors = {};
+		this.trees = {};
+		this.hover = null;
+		this.scope = ['src/routes/'];
+	}
+
+	/** Adds a value to a variant axis (copying the default's classes) and shows it on the component canvas. */
+	async addVariant(axis: string, value: string) {
+		const current = this.editingComponent;
+		if (!current) return;
+		const ok = await this.edit(`Add ${value} variant`, [{ type: 'add-variant', file: current.component.file, axis, value }]);
+		if (!ok) return;
+		await this.loadComponents();
+		const component = this.components.find((c) => c.file === current.component.file) ?? current.component;
+		this.editingComponent = { ...current, component, spec: buildCanvasSpec(component) };
+		const url = this.canvasUrl;
+		if (url) this.frames.get('component')?.send({ type: 'navigate', url });
+	}
+
 	// ----------------------------------------------------- breakpoints
 	/** Adds a breakpoint frame (kept sorted widest first, like Framer). */
 	async addBreakpoint(width: number, name?: string) {
@@ -358,6 +415,7 @@ class EditorState {
 	private frameUrls: Record<string, string> = {};
 
 	onFrameNavigated(frameId: string, url: string, title: string) {
+		if (this.editingComponent) return; // the component canvas isn't a page of the app
 		const previous = this.frameUrls[frameId];
 		this.frameUrls[frameId] = url;
 		const primary = this.primaryFrameId;

@@ -79,7 +79,7 @@ export function scanRoutes(root: string, routesDir = 'src/routes'): RouteInfo[] 
 		}
 
 		for (const entry of entries) {
-			if (entry.startsWith('.') || entry === 'node_modules') continue;
+			if (entry.startsWith('.') || entry === 'node_modules' || entry === '__codesigner') continue;
 			if (statSync(join(dirAbs, entry)).isDirectory()) walk(dirRel ? `${dirRel}/${entry}` : entry, chain);
 		}
 	};

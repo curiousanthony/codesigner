@@ -19,7 +19,7 @@
 
 	const worldWidth = $derived(layout.length ? layout.at(-1)!.x + layout.at(-1)!.bp.width : 0);
 	const worldHeight = $derived(Math.max(0, ...editor.breakpoints.map((b) => b.height)));
-	const url = $derived(editor.frameUrl());
+	const url = $derived(editor.canvasUrl);
 
 	const MIN = 0.05;
 	const MAX = 4;
@@ -117,7 +117,7 @@
 	// Fit once the frames are known, and again whenever breakpoints are added, removed or resized.
 	let fittedFor = '';
 	$effect(() => {
-		const signature = editor.breakpoints.map((b) => `${b.id}:${b.width}`).join(',');
+		const signature = editor.breakpoints.map((b) => `${b.id}:${b.width}x${b.height}`).join(',');
 		if (worldWidth && viewport && signature !== fittedFor) {
 			fittedFor = signature;
 			requestAnimationFrame(zoomToFit);

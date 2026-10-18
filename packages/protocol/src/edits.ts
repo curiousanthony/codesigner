@@ -36,7 +36,17 @@ export type EditOp =
 	| { type: 'remove'; targets: SourceLoc[] }
 	| { type: 'duplicate'; targets: SourceLoc[] }
 	| { type: 'move'; target: SourceLoc; parent: SourceLoc; index: number }
-	| { type: 'rename-tag'; target: SourceLoc; tag: string };
+	| { type: 'rename-tag'; target: SourceLoc; tag: string }
+	| {
+			/** Classes of one variant combination of a tv() component (edits that variant's own entry). */
+			type: 'variant-classes';
+			file: string;
+			/** Variant values, e.g. { variant: 'destructive', size: 'sm' }; missing axes use defaultVariants. */
+			context: Record<string, string>;
+			remove: string[];
+			add: string[];
+	  }
+	| { type: 'add-variant'; file: string; axis: string; value: string; copyFrom?: string };
 
 export interface EditRequest {
 	/** Human label used for undo history and checkpoint commits, e.g. "Change gap". */

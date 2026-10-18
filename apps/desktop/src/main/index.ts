@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
 import fixPath from 'fix-path';
 import { resolve } from 'node:path';
-import { checkpoint, createDesignBranch, listBranches, scanRoutes } from '@codesigner/engine';
+import { checkpoint, createDesignBranch, ensureIsolationRoute, listBranches, scanRoutes } from '@codesigner/engine';
 import { EDITOR_APP_URL, EDITOR_DEV_URL, appVersion, isDev, preloadPath } from './env.js';
 import { handle, broadcast } from './ipc.js';
 import { handleAppScheme, registerAppScheme } from './protocol.js';
@@ -17,6 +17,7 @@ import {
 import { devServerLogs, devServerState, startDevServer, stopAllDevServers, stopDevServer } from './devservers.js';
 import { checkForUpdate } from './updates.js';
 import { buildMenu } from './menu.js';
+import { forceStates } from './states.js';
 import { registerSourceHandlers } from './source.js';
 
 // GUI apps launched from Finder don't inherit the login shell's PATH (bun, node, git…).
@@ -78,7 +79,8 @@ function registerHandlers() {
 	}));
 	handle('app:check-update', () => checkForUpdate());
 	handle('app:open-external', (url) => {
-		if (/^https:\/\//.test(url)) void shell.openExternal(url);
+		// The web, or the project's own dev server (the Preview button).
+		if (/^https:\/\//.test(url) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(url)) void shell.openExternal(url);
 	});
 
 	handle('project:pick', () => pickProject());
@@ -88,6 +90,8 @@ function registerHandlers() {
 	handle('project:routes', (worktree) => scanRoutes(worktree));
 	handle('project:reveal', (path) => revealPath(path));
 	handle('project:open-in-editor', (file, line, column) => openInEditor(file, line, column));
+	handle('canvas:ensure-isolation', (worktree) => ensureIsolationRoute(worktree));
+	handle('canvas:force-states', (id, rules) => forceStates(id, rules));
 
 	handle('branch:list', (root) => listBranches(root));
 	handle('branch:create', (root, name, from) => createDesignBranch(root, name, from));
