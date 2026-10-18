@@ -6,7 +6,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 
 const root = join(import.meta.dir, '..', '..', '..');
-const EDITOR_URL = 'http://localhost:5199';
+// CODESIGNER_EDITOR_PORT lets several checkouts run side by side.
+const EDITOR_PORT = process.env.CODESIGNER_EDITOR_PORT ?? '5199';
+const EDITOR_URL = `http://localhost:${EDITOR_PORT}`;
 const children: ChildProcess[] = [];
 
 function run(cmd: string, args: string[], cwd: string, env: Record<string, string> = {}) {
@@ -42,6 +44,6 @@ function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-run('bun', ['run', 'dev'], join(root, 'apps', 'editor'));
+run('bun', ['run', 'dev'], join(root, 'apps', 'editor'), { CODESIGNER_EDITOR_PORT: EDITOR_PORT });
 await waitFor(EDITOR_URL);
 run('bunx', ['electron-vite', 'dev', '--watch'], join(root, 'apps', 'desktop'), { CODESIGNER_EDITOR_URL: EDITOR_URL });

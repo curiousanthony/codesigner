@@ -21,7 +21,7 @@ export default defineConfig({
 			strategy: ['localStorage', 'preferredLanguage', 'baseLocale']
 		})
 	],
-	server: { port: 5199, strictPort: true },
+	server: { port: Number(process.env.CODESIGNER_EDITOR_PORT ?? 5199), strictPort: true },
 	test: {
 		expect: { requireAssertions: true },
 		include: ['src/**/*.{test,spec}.{js,ts}'],

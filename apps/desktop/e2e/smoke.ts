@@ -20,7 +20,7 @@ const userData = join(work, 'user-data');
 
 const app = await electron.launch({
 	args: [join(import.meta.dirname, '..', 'out/main/index.js')],
-	env: { ...process.env, CODESIGNER_USER_DATA: userData, CODESIGNER_EDITOR_URL: 'http://localhost:5199' }
+	env: { ...process.env, CODESIGNER_USER_DATA: userData, CODESIGNER_EDITOR_URL: `http://localhost:${process.env.CODESIGNER_EDITOR_PORT ?? 5199}` }
 });
 
 const log = (...args: unknown[]) => console.log('[e2e]', ...args);
@@ -211,7 +211,7 @@ await app.close();
 // Restart with the same profile: the session must survive.
 const app2 = await electron.launch({
 	args: [join(import.meta.dirname, '..', 'out/main/index.js')],
-	env: { ...process.env, CODESIGNER_USER_DATA: userData, CODESIGNER_EDITOR_URL: 'http://localhost:5199' }
+	env: { ...process.env, CODESIGNER_USER_DATA: userData, CODESIGNER_EDITOR_URL: `http://localhost:${process.env.CODESIGNER_EDITOR_PORT ?? 5199}` }
 });
 const page2 = await app2.firstWindow();
 await page2.waitForFunction(() => (window as any).__editor?.appInfo);

@@ -43,7 +43,7 @@ bun install
 bun run dev
 ```
 
-`bun run dev` starts the editor UI (SvelteKit on :5199) and the Electron shell with hot reload. Then click **Open a SvelteKit project**. `fixtures/kit2-app` is a ready-made test project whose login is `demo@codesigner.test` / `design-demo`.
+`bun run dev` starts the editor UI (SvelteKit on :5199, override with `CODESIGNER_EDITOR_PORT`) and the Electron shell with hot reload. Then click **Open a SvelteKit project**. `fixtures/kit2-app` is a ready-made test project whose login is `demo@codesigner.test` / `design-demo`.
 
 ```bash
 bun run test        # engine (bun test) + editor (vitest)

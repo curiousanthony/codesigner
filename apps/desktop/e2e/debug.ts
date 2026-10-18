@@ -10,7 +10,7 @@ const project = join(work, 'kit2-app');
 execSync(`cp -cR ${join(repo, 'fixtures/kit2-app')} ${project}`);
 const app = await electron.launch({
 	args: [join(import.meta.dirname, '..', 'out/main/index.js')],
-	env: { ...process.env, CODESIGNER_USER_DATA: join(work, 'ud'), CODESIGNER_EDITOR_URL: 'http://localhost:5199' }
+	env: { ...process.env, CODESIGNER_USER_DATA: join(work, 'ud'), CODESIGNER_EDITOR_URL: `http://localhost:${process.env.CODESIGNER_EDITOR_PORT ?? 5199}` }
 });
 const page = await app.firstWindow();
 await page.waitForFunction(() => (window as any).__editor !== undefined);
