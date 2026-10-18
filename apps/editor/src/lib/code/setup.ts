@@ -3,7 +3,7 @@ import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { javascript } from '@codemirror/lang-javascript';
 import { bracketMatching, foldGutter, indentOnInput, indentUnit, syntaxHighlighting, HighlightStyle } from '@codemirror/language';
-import { Annotation, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction, type Extension } from '@codemirror/state';
 import {
 	Decoration,
 	EditorView,
@@ -134,7 +134,8 @@ export function replaceFromDisk(view: EditorView, next: string) {
 	while (end < max - start && current.charCodeAt(current.length - 1 - end) === next.charCodeAt(next.length - 1 - end)) end++;
 	view.dispatch({
 		changes: { from: start, to: current.length - end, insert: next.slice(start, next.length - end) },
-		annotations: [fromDisk.of(true)]
+		// Not undoable here: ⌘Z in the panel must never revert a visual edit or an agent's change.
+		annotations: [fromDisk.of(true), Transaction.addToHistory.of(false)]
 	});
 }
 

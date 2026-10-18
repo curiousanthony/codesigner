@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 
 /** URL of the component canvas page served by the user's own dev server. */
@@ -117,4 +117,14 @@ export function ensureIsolationRoute(root: string): string {
 		}
 	}
 	return ISOLATION_PATH;
+}
+
+/**
+ * Deletes the component canvas route. It only exists while a component is being
+ * edited: git ignores it, but a deploy made straight from the folder wouldn't.
+ */
+export function removeIsolationRoute(root: string) {
+	const file = join(root, ISOLATION_FILE);
+	if (!existsSync(file) || readFileSync(file, 'utf8') !== PAGE) return; // never delete a file we didn't write
+	rmSync(join(root, ISOLATION_DIR), { recursive: true, force: true });
 }

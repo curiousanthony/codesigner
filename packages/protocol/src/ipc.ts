@@ -51,6 +51,8 @@ export interface InvokeMap {
 	 * given the dev server URL, waits until the server serves it. Returns its URL path.
 	 */
 	'canvas:ensure-isolation': (worktree: string, serverUrl?: string) => string;
+	/** Deletes the component canvas route from the working copy. */
+	'canvas:remove-isolation': (worktree: string) => void;
 	/** Forces :hover / :active / :focus-visible on elements of a canvas frame (DevTools protocol). */
 	'canvas:force-states': (webContentsId: number, rules: { selector: string; states: string[] }[]) => boolean;
 
@@ -107,6 +109,7 @@ export const INVOKE_CHANNELS = [
 	'project:reveal',
 	'project:open-in-editor',
 	'canvas:ensure-isolation',
+	'canvas:remove-isolation',
 	'canvas:force-states',
 	'branch:list',
 	'branch:create',

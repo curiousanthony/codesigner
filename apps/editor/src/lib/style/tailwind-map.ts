@@ -162,7 +162,9 @@ export function responsiveSet(
 	utilities: string[],
 	frameWidth: number,
 	frameWidths: number[],
-	breakpoints = DEFAULT_BREAKPOINTS
+	breakpoints = DEFAULT_BREAKPOINTS,
+	/** What larger frames show when no class sets it (e.g. their computed display), so they can be pinned. */
+	inherited: string[] = []
 ): ClassEdit {
 	const prefix = activePrefix(className, family, frameWidth, breakpoints);
 	const edit = setFamily(className, family, utilities, prefix);
@@ -177,7 +179,8 @@ export function responsiveSet(
 	}
 	const sharing = frameWidths.filter((w) => w > frameWidth && w < nextUsed).sort((a, b) => a - b);
 	if (sharing.length === 0) return edit;
-	const previous = familyTokens(className, family, prefix).map((t) => parseToken(t).utility);
+	const own = familyTokens(className, family, prefix).map((t) => parseToken(t).utility);
+	const previous = own.length ? own : inherited;
 	// With no class to restore (the value came from a default), larger frames follow the edit.
 	if (previous.length === 0) return edit;
 	const screen = screenBetween(frameWidth, sharing[0], breakpoints);

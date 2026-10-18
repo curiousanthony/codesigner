@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
 import fixPath from 'fix-path';
 import { resolve } from 'node:path';
-import { checkpoint, createDesignBranch, ensureIsolationRoute, listBranches, scanRoutes } from '@codesigner/engine';
+import { checkpoint, createDesignBranch, ensureIsolationRoute, listBranches, removeIsolationRoute, scanRoutes } from '@codesigner/engine';
 import { EDITOR_APP_URL, EDITOR_DEV_URL, appVersion, isDev, preloadPath } from './env.js';
 import { handle, broadcast } from './ipc.js';
 import { handleAppScheme, registerAppScheme } from './protocol.js';
@@ -18,7 +18,10 @@ import { devServerLogs, devServerState, startDevServer, stopAllDevServers, stopD
 import { checkForUpdate } from './updates.js';
 import { buildMenu } from './menu.js';
 import { forceStates } from './states.js';
-import { registerSourceHandlers } from './source.js';
+import { registerSourceHandlers, stopWatchingSources } from './source.js';
+
+/** Working copies holding the component canvas route, removed on quit. */
+const isolated = new Set<string>();
 
 // GUI apps launched from Finder don't inherit the login shell's PATH (bun, node, git…).
 fixPath();
@@ -90,8 +93,13 @@ function registerHandlers() {
 	handle('project:routes', (worktree) => scanRoutes(worktree));
 	handle('project:reveal', (path) => revealPath(path));
 	handle('project:open-in-editor', (file, line, column) => openInEditor(file, line, column));
+	handle('canvas:remove-isolation', (worktree) => {
+		removeIsolationRoute(worktree);
+		isolated.delete(worktree);
+	});
 	handle('canvas:ensure-isolation', async (worktree, serverUrl) => {
 		const path = ensureIsolationRoute(worktree);
+		isolated.add(worktree);
 		// A route created a moment ago 404s until the dev server registers it.
 		if (serverUrl && /^http:\/\/(localhost|127\.0\.0\.1):\d+\/?$/.test(serverUrl)) {
 			const url = new URL(path, serverUrl).toString();
@@ -117,8 +125,10 @@ function registerHandlers() {
 	handle('devserver:state', (worktree) => devServerState(worktree));
 	handle('devserver:logs', (worktree) => devServerLogs(worktree));
 
-	registerSourceHandlers(handle, (worktree, files) =>
-		broadcast('source:changed', { worktree: resolve(worktree), files, origin: 'editor' })
+	registerSourceHandlers(
+		handle,
+		(worktree, files) => broadcast('source:changed', { worktree: resolve(worktree), files, origin: 'editor' }),
+		(worktree, files) => broadcast('source:changed', { worktree, files, origin: 'external' })
 	);
 }
 
@@ -136,6 +146,8 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
 	stopAllDevServers();
+	for (const worktree of isolated) removeIsolationRoute(worktree);
+	stopWatchingSources();
 	void previewSession().flushStorageData();
 });
 

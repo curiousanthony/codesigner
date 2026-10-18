@@ -180,9 +180,10 @@ class EditorState {
 			this.logs.push(log);
 			if (this.logs.length > 500) this.logs.splice(0, this.logs.length - 500);
 		});
-		on('source:changed', ({ worktree, files }) => {
+		on('source:changed', ({ worktree, files, origin }) => {
 			if (worktree === this.worktree) for (const listener of this.sourceListeners) listener(files);
-			for (const file of files) this.pendingHmr.add(file);
+			// Only our own writes gate the next edit on a hot reload.
+			if (origin === 'editor') for (const file of files) this.pendingHmr.add(file);
 			if (this.project?.cssEntry && files.includes(this.project.cssEntry)) void this.loadTokens();
 		});
 		const [info, recent] = await Promise.all([invoke('app:info'), invoke('project:recent')]);
@@ -226,6 +227,7 @@ class EditorState {
 	}
 
 	closeProject() {
+		this.exitComponent();
 		if (this.worktree) void invoke('devserver:stop', this.worktree);
 		this.project = null;
 		this.worktree = null;
@@ -261,6 +263,7 @@ class EditorState {
 	}
 
 	async switchWorktree(worktree: string) {
+		this.exitComponent();
 		if (this.worktree && this.worktree !== worktree) void invoke('devserver:stop', this.worktree);
 		this.worktree = worktree;
 		this.selection = EMPTY_SELECTION;
@@ -320,6 +323,7 @@ class EditorState {
 	exitComponent() {
 		if (!this.editingComponent) return;
 		this.editingComponent = null;
+		if (this.worktree) void invoke('canvas:remove-isolation', this.worktree);
 		this.selection = EMPTY_SELECTION;
 		this.mirrors = {};
 		this.trees = {};
@@ -611,7 +615,7 @@ class EditorState {
 	}
 
 	/** After HMR or DOM changes: re-find the selected layers by source location. */
-	async reresolveSelection() {
+	async reresolveSelection(attempt = 0): Promise<void> {
 		const { frameId, infos, occurrence } = this.selection;
 		const frame = frameId ? this.frames.get(frameId) : null;
 		if (!frame || infos.length === 0) return;
@@ -629,6 +633,12 @@ class EditorState {
 			}
 		}
 		if (ids.length === 0) {
+			// Mid hot-reload the old DOM may be gone and the new one not mounted yet: look again shortly.
+			if (attempt < 3 && this.selection.infos === infos) {
+				await new Promise((r) => setTimeout(r, 250));
+				if (this.selection.infos === infos) return this.reresolveSelection(attempt + 1);
+				return;
+			}
 			this.clearSelection();
 			return;
 		}

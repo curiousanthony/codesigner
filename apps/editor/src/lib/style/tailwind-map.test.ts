@@ -67,6 +67,10 @@ describe('tailwind map', () => {
 			expect(responsiveSet('gap-2 md:gap-4 lg:gap-8', 'gap', ['gap-6'], 810, frames)).toEqual({ remove: ['md:gap-4'], add: ['md:gap-6'] });
 			expect(responsiveSet('gap-2 md:gap-4', 'gap', ['gap-6'], 390, frames)).toEqual({ remove: ['gap-2'], add: ['gap-6'] });
 		});
+		test('hiding on Phone keeps larger frames showing', () => {
+			expect(responsiveSet('flex gap-2', 'display', ['hidden'], 390, frames)).toEqual({ remove: ['flex'], add: ['hidden', 'md:flex'] });
+			expect(responsiveSet('p-4', 'display', ['hidden'], 390, frames, undefined, ['block'])).toEqual({ remove: [], add: ['hidden', 'md:block'] });
+		});
 		test('a value with no class to restore applies to larger frames too', () => {
 			expect(responsiveSet('flex', 'gap', ['gap-4'], 390, frames)).toEqual({ remove: [], add: ['gap-4'] });
 		});

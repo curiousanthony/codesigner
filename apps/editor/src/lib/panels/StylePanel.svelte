@@ -37,6 +37,7 @@
 		parseToken,
 		px,
 		responsiveSet,
+		DEFAULT_BREAKPOINTS,
 		setFamily,
 		sizeClasses,
 		sizeMode,
@@ -124,6 +125,27 @@
 	// Framer semantics: edits apply to this breakpoint and the smaller ones inheriting from it.
 	const set = (family: Family, utilities: string[]) =>
 		variantContext ? setFamily(cls, family, utilities, statePrefix) : responsiveSet(cls, family, utilities, frameWidth, frameWidths);
+
+	// --------------------------------------------------------- visibility
+	const DISPLAY_UTILITIES = ['block', 'flex', 'grid', 'inline', 'inline-block', 'inline-flex', 'inline-grid', 'contents', 'table'];
+
+	/** Hide on this breakpoint (and smaller ones); larger frames keep their current display. */
+	function hideEdit(): ClassEdit {
+		if (variantContext) return setFamily(cls, 'display', ['hidden'], statePrefix);
+		const shown = c && DISPLAY_UTILITIES.includes(c.display) ? [c.display] : ['block'];
+		return responsiveSet(cls, 'display', ['hidden'], frameWidth, frameWidths, DEFAULT_BREAKPOINTS, shown);
+	}
+
+	/** Show again: drop `hidden` here, restoring the display used by the next larger breakpoint if there is one. */
+	function showEdit(): ClassEdit {
+		const prefix = prefixFor('display');
+		const hidden = familyTokens(cls, 'display', prefix).filter((t) => parseToken(t).utility === 'hidden');
+		const above = Object.entries(DEFAULT_BREAKPOINTS)
+			.filter(([name, width]) => width > (prefix ? DEFAULT_BREAKPOINTS[prefix.slice(0, -1)] : 0) && width <= Math.max(...frameWidths) && familyTokens(cls, 'display', `${name}:`).length)
+			.sort((a, b) => a[1] - b[1])[0];
+		const restore = above ? familyTokens(cls, 'display', `${above[0]}:`).map((t) => parseToken(t).utility).filter((u) => u !== 'hidden') : [];
+		return { remove: hidden, add: restore.map((u) => prefix + u) };
+	}
 
 	// ------------------------------------------------------------ size
 	const widthMode = $derived<SizeMode>(c ? sizeMode(cls, 'width', c.parentDisplay, c.parentFlexDirection, frameWidth) : 'auto');
@@ -573,10 +595,7 @@
 				<Segmented
 					options={[{ value: 'yes', label: m.yes() }, { value: 'no', label: m.no() }]}
 					value={visible ? 'yes' : 'no'}
-					onchange={(v) => {
-						const hidden = familyTokens(cls, 'display', prefixFor('display')).filter((t) => parseToken(t).utility === 'hidden');
-						void apply(m.edit_visible(), v === 'no' ? { remove: [], add: [prefixFor('display') + 'hidden'] } : { remove: hidden, add: [] });
-					}}
+					onchange={(v) => void apply(m.edit_visible(), v === 'no' ? hideEdit() : showEdit())}
 				/>
 			</Row>
 			<Row label={m.label_fill()} overridden={overridden('background')}>
