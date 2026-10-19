@@ -237,6 +237,9 @@ class EditorState {
 		this.expanded = next;
 	}
 
+	/** ⌘K: the command palette. */
+	paletteOpen = $state(false);
+
 	/** A page that needs parameters before it can open: the Pages tab asks for them. */
 	paramsRequest = $state<string | null>(null);
 

@@ -19,6 +19,7 @@
 	import StylePanel from '#lib/panels/StylePanel.svelte';
 	import AgentPanel from '#lib/panels/AgentPanel.svelte';
 	import CommentsPanel from '#lib/panels/CommentsPanel.svelte';
+	import CommandPalette from '#lib/CommandPalette.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let canvas: Canvas | undefined = $state();
@@ -100,13 +101,38 @@
 			case 'toggle-interact':
 				editor.setMode(editor.mode === 'interact' ? 'design' : 'interact');
 				break;
+			case 'command-palette':
+				if (editor.project && !editor.startChoice) editor.paletteOpen = !editor.paletteOpen;
+				break;
+			case 'tool-stack':
+			case 'tool-frame':
+			case 'tool-grid':
+			case 'tool-text':
+				useTool(command.slice(5) as DrawTool);
+				break;
+			case 'tool-comment':
+				editor.setTool('comment');
+				break;
+			case 'wrap-stack':
+			case 'wrap-frame':
+			case 'wrap-grid':
+				void wrapSelection(command.slice(5) as 'stack' | 'frame' | 'grid');
+				break;
+			case 'duplicate':
+				void duplicateSelection();
+				break;
 		}
 	}
 
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Alt') editor.altHeld = true;
-		if (!editor.project || editor.startChoice || editor.historyOpen || editor.createComponentOpen || isTyping(event)) return;
 		const mod = event.metaKey || event.ctrlKey;
+		if (mod && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k' && editor.project && !editor.startChoice) {
+			event.preventDefault();
+			editor.paletteOpen = !editor.paletteOpen;
+			return;
+		}
+		if (!editor.project || editor.startChoice || editor.historyOpen || editor.createComponentOpen || editor.paletteOpen || isTyping(event)) return;
 		if (event.code === 'Space' && !event.repeat) {
 			editor.spaceHeld = true;
 			event.preventDefault();
@@ -287,6 +313,9 @@
 {/if}
 {#if editor.createComponentOpen && editor.selected}
 	<CreateComponent />
+{/if}
+{#if editor.paletteOpen && editor.project}
+	<CommandPalette run={runCommand} onclose={() => (editor.paletteOpen = false)} />
 {/if}
 
 <Toasts />

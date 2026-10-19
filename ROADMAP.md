@@ -123,7 +123,7 @@ Verified by `e2e/smoke.ts` on the fixture (save → restore → ship into the ch
 
 - ⬜ French translation
 - ✅ Dark theme for the editor itself (Framer-calibrated tokens), View → Appearance: System / Light / Dark, remembered; the canvas keeps its own dark preview
-- ⬜ Command palette (`⌘K`)
+- ✅ Command palette (`⌘K`): actions with their shortcuts, pages, and components to insert (inside the selected container, after the selected layer, or at the end of the page); fuzzy search
 - ⬜ Performance: snapshot far-away frames, cap live webviews
 
 ## Not now 💤

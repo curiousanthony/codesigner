@@ -70,6 +70,8 @@ export function buildMenu(send: (command: string) => void, theme: { current: Edi
 		{
 			label: 'View',
 			submenu: [
+				cmd('Command Palette…', 'command-palette', 'CmdOrCtrl+K'),
+				{ type: 'separator' },
 				cmd('Zoom In', 'zoom-in', 'CmdOrCtrl+='),
 				cmd('Zoom Out', 'zoom-out', 'CmdOrCtrl+-'),
 				cmd('Zoom to 100%', 'zoom-reset', 'CmdOrCtrl+0'),

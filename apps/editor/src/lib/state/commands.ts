@@ -210,6 +210,37 @@ export async function insertComponent(component: ComponentInfo, frameId: string,
 	if (loc) pendingSelect({ ...loc, tag: component.name }, frameId);
 }
 
+const CONTAINER_KINDS = new Set(['stack-h', 'stack-v', 'grid', 'frame']);
+
+/**
+ * Inserts a component without dragging (⌘K): inside the selected container,
+ * after the selected layer otherwise, or at the end of the page.
+ */
+export async function insertComponentHere(component: ComponentInfo) {
+	const frameId = editor.selection.frameId ?? editor.primaryFrameId;
+	if (!frameId) return;
+	const id = editor.selection.ids[0];
+	const node = id ? editor.findNode(id, frameId) : null;
+	let target: Pick<DropTarget, 'parent' | 'anchor'> | null = null;
+	if (node?.loc && !node.isInstance && CONTAINER_KINDS.has(node.kind)) {
+		target = { parent: { ...node.loc, tag: node.tag }, anchor: null };
+	} else if (node?.loc) {
+		const parentId = editor.pathOf(id, frameId).at(-2);
+		const parent = parentId ? editor.findNode(parentId, frameId) : null;
+		if (parent?.loc && parent.loc.file === node.loc.file) {
+			target = { parent: { ...parent.loc, tag: parent.isInstance ? parent.name : parent.tag }, anchor: { target: { ...node.loc, tag: node.isInstance ? node.name : node.tag }, position: 'after' } };
+		}
+	} else {
+		// Nothing selected: the page's outermost element.
+		const find = (n: LayerNode): LayerNode | null => (n.loc && /\+page\.svelte$/.test(n.loc.file) && !n.isInstance ? n : n.children.map(find).find(Boolean) ?? null);
+		const root = editor.trees[frameId];
+		const page = root ? find(root) : null;
+		if (page?.loc) target = { parent: { ...page.loc, tag: page.tag }, anchor: null };
+	}
+	if (!target) return void editor.toast(m.cmd_select_container());
+	await insertComponent(component, frameId, target as DropTarget);
+}
+
 /** `logo-dark.svg` → `logoDarkUrl`, the binding a $lib image is imported as. */
 const imageBinding = (name: string) =>
 	name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase()).replace(/^[^a-zA-Z_]+/, '') + 'Url';
