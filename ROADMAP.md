@@ -77,7 +77,7 @@ Tried on the real SaaS (all undone, worktree clean): hover state and `dark:` edi
 - ⬜ Component instance panel: props from `$props()` and variants from `tv()` (Variant dropdown, Text, Boolean, Icon…)
 - ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`
 - ✅ Component isolation page served by the app's own dev server (git-ignored route `src/routes/__codesigner`, root layout only)
-- ⬜ Props-only components (no `tv()`): sample prop values per cell, required props
+- ✅ Components without `tv()` (most app components): Default / Hover / Pressed, a cell per boolean prop, a row per enum prop, sample values for required props; edits change the component's own markup (`hover:` classes for state cells). Double-click a component in Assets to open it
 - ✅ Create a component from the selection (`⌥⌘K`, or the component button in the Style panel): the markup moves to `src/lib/components/<Name>.svelte`, values it reads from the page (script variables, `{#each}` items, snippets) become props, its imports are copied, two-way state is refused; undo deletes the file
 - ⬜ Expose a property (the ⊕ binding): turn a static value inside a component into a prop
 

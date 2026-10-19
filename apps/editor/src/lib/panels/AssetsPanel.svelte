@@ -130,6 +130,7 @@
 							if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
 						}}
 						ondragend={() => (editor.draggingAsset = null)}
+						ondblclick={() => void editor.editComponent(component)}
 					>
 						<Component class="size-3.5 shrink-0 text-component" strokeWidth={1.75} />
 						<span class="min-w-0 flex-1 truncate">{component.name}</span>

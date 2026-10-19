@@ -25,9 +25,28 @@ describe('component canvas spec', () => {
 		expect(spec.text).toBe('Button');
 	});
 
-	test('components without variants get a single cell', () => {
-		const spec = buildCanvasSpec({ ...button, variants: [], props: [] });
-		expect(spec.sections).toEqual([{ title: 'Button', cells: [{ label: 'Button', props: {}, context: {} }] }]);
+	test('components without variants: Default / Hover / Pressed, a cell per boolean, a row per enum', () => {
+		const prop = (name: string, control: string, extra: object = {}) => ({ name, control, type: null, default: null, optional: true, bindable: false, description: null, ...extra }) as ComponentInfo['props'][number];
+		const spec = buildCanvasSpec({
+			...button,
+			name: 'StatusPill',
+			variants: [],
+			props: [
+				prop('label', 'text', { optional: false }),
+				prop('active', 'boolean', { default: 'false' }),
+				prop('compact', 'boolean', { default: 'true' }),
+				prop('tone', 'enum', { options: ['info', 'warning'] }),
+				prop('open', 'boolean', { bindable: true })
+			]
+		});
+		expect(spec.sections.map((s) => s.title)).toEqual(['StatusPill', 'Props', 'Tone']);
+		expect(spec.sections[0].cells.map((c) => c.state)).toEqual([undefined, 'hover', 'active']);
+		expect(spec.sections[0].cells[0].props).toEqual({ label: 'Label' });
+		expect(spec.sections[1].cells).toEqual([
+			{ label: 'active', props: { label: 'Label', active: true }, context: {} },
+			{ label: 'compact: false', props: { label: 'Label', compact: false }, context: {} }
+		]);
+		expect(spec.sections[2].cells.map((c) => c.props.tone)).toEqual(['info', 'warning']);
 		expect(spec.text).toBe(null);
 	});
 });

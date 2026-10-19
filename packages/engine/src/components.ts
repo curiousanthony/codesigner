@@ -101,7 +101,6 @@ function controlFor(type: string | null, name: string, defaultValue: string | nu
 	return 'unknown';
 }
 
-/** Reads `let { a = 1, b }: Props = $props()` and the matching Props type members. */
 /** A component styles its root from the outside when it takes `class` or spreads the rest of its props. */
 export function acceptsClass(doc: SvelteDoc, props: ComponentProp[]): boolean {
 	if (props.some((p) => p.name === 'class')) return true;
@@ -117,6 +116,7 @@ export function acceptsClass(doc: SvelteDoc, props: ComponentProp[]): boolean {
 	return rest;
 }
 
+/** Reads `let { a = 1, b }: Props = $props()` and the matching Props type members. */
 export function extractProps(doc: SvelteDoc): ComponentProp[] {
 	const script = doc.ast.instance;
 	if (!script) return [];

@@ -105,8 +105,11 @@
 	const prefixFor = (family: Family) => (variantContext ? statePrefix : pagePrefix(family) || activePrefix(cls, family, frameWidth));
 
 	// ------------------------------------------------------------ apply
+	/** The component's looks come from tv(): edits go to the variant's entry. Otherwise to its own markup. */
+	const tvBacked = $derived(!!editor.editingComponent?.component.variants.length);
+
 	function ops(edit: ClassEdit): EditOp[] {
-		if (variantContext && editor.editingComponent) {
+		if (variantContext && editor.editingComponent && tvBacked) {
 			const { state: _state, ...context } = variantContext;
 			return [{ type: 'variant-classes', file: editor.editingComponent.component.file, context, remove: edit.remove, add: edit.add }];
 		}
@@ -373,7 +376,9 @@
 			<span class="flex-1 truncate font-semibold text-component">{canvasComponent.name}</span>
 			<button type="button" class="rounded-control px-2 py-1 text-label hover:bg-control" onclick={() => editor.exitComponent()}>{m.component_done()}</button>
 		</div>
-		{#if variantContext}
+		{#if !tvBacked}
+			<p class="mt-2 rounded-control bg-component-tint px-2.5 py-1.5 text-[11px] text-component">{m.component_edits_master()}</p>
+		{:else if variantContext}
 			<p class="mt-2 rounded-control bg-component-tint px-2.5 py-1.5 text-component">
 				{m.component_editing_variant({
 					variant: Object.entries(variantContext).filter(([k]) => k !== 'state').map(([k, v]) => `${k}=${v}`).join(', ') || m.component_default(),
