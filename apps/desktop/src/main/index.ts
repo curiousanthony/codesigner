@@ -95,7 +95,8 @@ function registerHandlers() {
 		chrome: process.versions.chrome,
 		locale: app.getLocale(),
 		guestPreload: `file://${preloadPath('guest')}`,
-		isDev
+		isDev,
+		noAutosave: process.env.CODESIGNER_NO_AUTOSAVE === '1'
 	}));
 	handle('app:check-update', () => checkForUpdate());
 	handle('app:open-external', (url) => {

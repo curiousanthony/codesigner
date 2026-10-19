@@ -48,7 +48,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 
 ## M2 — Full design surface 🚧
 
-- ✅ Draw tools like Framer: `S` Stack, `F` Frame, `⇧G` Grid, `T` Text (also in the `+` menu). Click or drag inside a container; an insertion line follows its flow (row, column, grid), `{#each}` runs are kept intact, empty layout space draws into the page. Drawn sizes snap to the 4px scale. `⇧A` wraps the selection in a Stack
+- ✅ Draw tools like Framer: `S` Stack, `F` Frame, `⇧G` Grid, `T` Text (also in the `+` menu). Click or drag inside a container; an insertion line follows its flow (row, column, grid), `{#each}` runs are kept intact, empty layout space draws into the page. Drawn sizes snap to the 4px scale; drawn frames get a fill that contrasts in light and dark. `⇧A` wraps the selection in a Stack (smoke-tested; tried on the real SaaS)
 - ⬜ Insert: Image; shadcn components from Assets
 - ✅ Text editing on canvas: double-click a selected text layer (or draw one with `T`), type, `↩` commits, `Esc` cancels
 - ⬜ Rich text (inline `<strong>`/links), typography presets
@@ -75,7 +75,9 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ⬜ Props-only components (no `tv()`): sample prop values per cell, required props
 - ⬜ Create a component from the selection (`⌥⌘K`), expose a property (the ⊕ binding)
 
-## M4 — Version control UX ✅ (except the visual diff)
+## M4 — Version control UX 🚧
+
+Verified by `e2e/smoke.ts` on the fixture (save → restore → ship into the checked-out base) and by engine tests (conflicts, base not checked out, push to a local remote). Not run on the real SaaS on purpose: shipping there would touch its `develop`. Test drivers set `CODESIGNER_NO_AUTOSAVE=1` on real repositories.
 
 - ✅ Pick the branch to start designing from: first open asks (local and remote branches, newest first, or edit the checkout directly); "New design branch…" in the branch menu takes a base too
 - ✅ Branch menu in the top bar: switch, create (from any branch), rename, delete design branches (`⇧⌘B` new); each keeps its own dev server

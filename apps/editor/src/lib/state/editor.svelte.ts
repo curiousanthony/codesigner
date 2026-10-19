@@ -321,6 +321,7 @@ class EditorState {
 
 	/** Design branches save a version on their own once editing pauses (never the main checkout). */
 	get autosaves(): boolean {
+		if (this.appInfo?.noAutosave) return false;
 		return this.project?.settings.versioning === 'branches' && !!this.branch && !this.branch.isMainCheckout;
 	}
 

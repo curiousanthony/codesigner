@@ -128,12 +128,17 @@ export function shipToBase(worktree: string, message: string): string {
 	const baseSha = git(worktree, ['rev-parse', base]);
 	if (tryGit(worktree, ['diff', '--quiet', base, 'HEAD']) !== null) throw new ShipError(`Nothing to ship: ${branch} matches ${base}`);
 
-	let tree: string;
-	try {
-		tree = git(worktree, ['merge-tree', '--write-tree', base, 'HEAD']).split('\n')[0];
-	} catch {
-		throw new ShipError(`${base} changed in ways that conflict with this design. Update from ${base} first.`);
+	// Merge the base in the (clean, just saved) design copy: works with any git version, and a
+	// conflict leaves nothing behind. The merge commit itself is dropped by the reset below.
+	if (tryGit(worktree, ['merge-base', '--is-ancestor', base, 'HEAD']) === null) {
+		try {
+			git(worktree, ['merge', '--no-edit', '-q', base]);
+		} catch {
+			tryGit(worktree, ['merge', '--abort']);
+			throw new ShipError(`${base} changed in ways that conflict with this design. Update from ${base} first.`);
+		}
 	}
+	const tree = git(worktree, ['rev-parse', 'HEAD^{tree}']);
 	const sha = git(worktree, ['commit-tree', tree, '-p', baseSha, '-m', message]);
 
 	const baseWorktree = worktreeOf(worktree, base);

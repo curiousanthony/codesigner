@@ -52,6 +52,15 @@ export async function insertLayer(kind: keyof typeof INSERT_MARKUP) {
 	}
 }
 
+/**
+ * Fill for drawn frames: the text color at low opacity contrasts with any page
+ * background, light or dark (a fixed token like `muted` can equal the background).
+ */
+function drawnFill(strong: boolean): string {
+	const themed = editor.tokens?.tokens.some((t) => t.name === '--color-foreground');
+	return `${themed ? 'bg-foreground' : 'bg-black'}/${strong ? 10 : 5}`;
+}
+
 /** Classes for a layer drawn with a tool; `size` is the drawn box in CSS px (null for a click). */
 export function drawnMarkup(kind: DrawTool, size: { width: number; height: number } | null): string {
 	// Snap to the 4px spacing grid so drawn sizes land on theme steps (w-40, h-24…).
@@ -59,11 +68,11 @@ export function drawnMarkup(kind: DrawTool, size: { width: number; height: numbe
 	const dims = size ? `${spacing('h', snap(size.height))} ${spacing('w', snap(size.width))}` : null;
 	switch (kind) {
 		case 'stack':
-			return `<div class="flex ${dims ?? 'min-h-24 w-40'} flex-col gap-2.5 p-2.5"></div>`;
+			return `<div class="flex ${dims ?? 'min-h-24 w-40'} flex-col gap-2.5 rounded-lg ${drawnFill(false)} p-2.5"></div>`;
 		case 'grid':
-			return `<div class="grid ${dims ?? 'min-h-24 w-40'} grid-cols-2 gap-2.5 p-2.5"></div>`;
+			return `<div class="grid ${dims ?? 'min-h-24 w-40'} grid-cols-2 gap-2.5 rounded-lg ${drawnFill(false)} p-2.5"></div>`;
 		case 'frame':
-			return `<div class="${dims ?? 'h-24 w-40'} rounded-lg bg-muted"></div>`;
+			return `<div class="${dims ?? 'h-24 w-40'} rounded-lg ${drawnFill(true)}"></div>`;
 		case 'text':
 			return size && size.width >= 24 ? `<p class="${spacing('w', Math.round(size.width / 4) * 4)}">Text</p>` : '<p>Text</p>';
 	}

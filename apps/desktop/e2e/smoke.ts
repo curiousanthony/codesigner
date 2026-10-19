@@ -277,6 +277,92 @@ await shot('11-component-canvas');
 await page.evaluate(() => (window as any).__editor.exitComponent());
 await page.waitForTimeout(1500);
 
+// ---------------------------------------------- draw, type, reorder (S/F/T tools)
+await page.evaluate(() => (window as any).__editor.goTo('/'));
+await page.waitForTimeout(2500);
+await page.evaluate(() => {
+	const e = (window as any).__editor;
+	e.clearSelection();
+	e.camera = { x: 20, y: 60, scale: 0.8 };
+});
+await page.waitForTimeout(600);
+const pageFile = join(wt, 'src/routes/(app)/+page.svelte');
+const beforeDraw = readFileSync(pageFile, 'utf8');
+/** Host point at an offset (guest px) from a guest element's box. */
+const at = (selector: string, dx: number, dy: number, from: 'top' | 'bottom' = 'bottom') =>
+	page.evaluate(
+		async ({ selector, dx, dy, from }) => {
+			const webview = document.querySelector('webview') as any;
+			const r = await webview.executeJavaScript(
+				`(() => { const el = [...document.querySelectorAll(${JSON.stringify(selector)})].at(-1); const r = el.getBoundingClientRect(); return { x: r.x, y: r.${from === 'top' ? 'top' : 'bottom'} }; })()`
+			);
+			const host = webview.getBoundingClientRect();
+			const s = (window as any).__editor.camera.scale;
+			return { x: host.left + (r.x + dx) * s, y: host.top + (r.y + dy) * s };
+		},
+		{ selector, dx, dy, from }
+	);
+const newLines = () => readFileSync(pageFile, 'utf8').split('\n').filter((l) => !beforeDraw.split('\n').includes(l));
+
+// F, then drag 200×100 (guest px) below the cards: a frame lands in the page, after the section.
+const below = await at('section', 40, 40);
+await page.keyboard.press('f');
+await page.mouse.move(below.x, below.y);
+await page.mouse.down();
+await page.mouse.move(below.x + 160, below.y + 80, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(2500);
+log('drawn frame:', newLines(), 'selected:', await page.evaluate(() => (window as any).__editor.selected?.name));
+
+// T, click under it, type, Enter.
+const underFrame = await at('.rounded-lg', 10, 30);
+await page.keyboard.press('t');
+await page.mouse.move(underFrame.x, underFrame.y);
+await page.mouse.click(underFrame.x, underFrame.y);
+await page.waitForFunction(() => !!(window as any).__editor.textEditing, null, { timeout: 8000 });
+await page.keyboard.type('Hello from smoke');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(2000);
+log('typed text:', newLines());
+
+// Drag the selected text above the cards section.
+const textAt = await at('p', 20, -8);
+const aboveSection = await at('section', 200, -12, 'top');
+await page.mouse.move(textAt.x, textAt.y);
+await page.mouse.down();
+await page.mouse.move(aboveSection.x, aboveSection.y, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(2500);
+const reordered = readFileSync(pageFile, 'utf8');
+log('text moved above the section:', reordered.indexOf('Hello from smoke') < reordered.indexOf('<section'));
+await shot('12-drawn');
+
+// Versions: save, delete the text, restore the saved version.
+await page.evaluate(() => (window as any).__editor.saveVersion('Smoke: drawn layers'));
+await page.evaluate(() => (window as any).__editor.edit('Delete', [{ type: 'remove', targets: [(window as any).__editor.selected.loc] }]));
+await page.waitForTimeout(1500);
+const deleted = !readFileSync(pageFile, 'utf8').includes('Hello from smoke');
+const versions = await page.evaluate(() => (window as any).__editor.versions());
+log('versions:', versions.map((v: any) => `${v.subject}${v.auto ? ' (auto)' : ''}`), 'deleted:', deleted);
+await page.evaluate((sha) => {
+	const e = (window as any).__editor;
+	return e.versions().then((list: any[]) => e.restoreVersion(list.find((v) => v.sha === sha)));
+}, versions.find((v: any) => v.subject === 'Smoke: drawn layers').sha);
+await page.waitForTimeout(1500);
+log('restored:', readFileSync(pageFile, 'utf8').includes('Hello from smoke'));
+
+// Ship into main (checked out in the opened folder, clean): one commit, the checkout fast-forwarded.
+const shipStatus = await page.evaluate(() => (window as any).__editor.shipStatus());
+log('ship status:', JSON.stringify({ base: shipStatus.base, ahead: shipStatus.ahead, baseWorktree: !!shipStatus.baseWorktree, baseDirty: shipStatus.baseDirty }));
+await page.evaluate(() => (window as any).__editor.ship('Smoke: drawn layers shipped'));
+await page.waitForTimeout(1000);
+log(
+	'shipped:',
+	execSync('git log -1 --format=%s main', { cwd: project, encoding: 'utf8' }).trim(),
+	'| main checkout has it:',
+	readFileSync(join(project, 'src/routes/(app)/+page.svelte'), 'utf8').includes('Hello from smoke')
+);
+
 await app.close();
 
 // Restart with the same profile: the session must survive.

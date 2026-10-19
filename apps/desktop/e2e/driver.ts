@@ -43,6 +43,8 @@ const app = await electron.launch({
 	env: {
 		...process.env,
 		CODESIGNER_USER_DATA: process.env.DRIVER_USER_DATA ?? join(home, 'user-data'),
+		// Driving a real repository: never commit versions on its own (DRIVER_AUTOSAVE=1 to allow).
+		CODESIGNER_NO_AUTOSAVE: process.argv[2] && process.env.DRIVER_AUTOSAVE !== '1' ? '1' : (process.env.CODESIGNER_NO_AUTOSAVE ?? ''),
 		CODESIGNER_EDITOR_URL: `http://localhost:${process.env.CODESIGNER_EDITOR_PORT ?? 5199}`
 	}
 });

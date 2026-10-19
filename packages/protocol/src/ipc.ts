@@ -25,6 +25,8 @@ export interface AppInfo {
 	/** Absolute path of the bridge preload, needed as the webview `preload` attribute. */
 	guestPreload: string;
 	isDev: boolean;
+	/** CODESIGNER_NO_AUTOSAVE: never save versions on its own (test runs against real repositories). */
+	noAutosave?: boolean;
 }
 
 export interface UpdateInfo {

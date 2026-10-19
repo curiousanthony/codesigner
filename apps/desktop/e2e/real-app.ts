@@ -26,7 +26,7 @@ const [, email, password] = seed;
 const log = (...args: unknown[]) => console.log('[real]', ...args);
 const app = await electron.launch({
 	args: [join(import.meta.dirname, '..', 'out/main/index.js')],
-	env: { ...process.env, CODESIGNER_USER_DATA: userData, CODESIGNER_EDITOR_URL: `http://localhost:${process.env.CODESIGNER_EDITOR_PORT ?? 5199}` }
+	env: { ...process.env, CODESIGNER_NO_AUTOSAVE: '1', CODESIGNER_USER_DATA: userData, CODESIGNER_EDITOR_URL: `http://localhost:${process.env.CODESIGNER_EDITOR_PORT ?? 5199}` }
 });
 const page: Page = await app.firstWindow();
 page.on('console', (msg) => msg.type() === 'error' && log('console error:', msg.text().slice(0, 200)));

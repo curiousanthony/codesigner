@@ -96,6 +96,22 @@ describe('ship', () => {
 		rmSync(join(repo, 'scratch.txt'));
 	});
 
+	test('reports a real conflict and leaves the base and the design copy untouched', () => {
+		writeFileSync(join(repo, 'page.svelte'), '<p class="text-red-500">hi</p>\n');
+		run(repo, 'commit', '-qam', 'Base edits the same line');
+		const baseBefore = run(repo, 'rev-parse', 'main');
+		writeFileSync(join(wt, 'page.svelte'), '<p class="text-blue-500">hi</p>\n');
+		expect(() => shipToBase(wt, 'Blue')).toThrow(/conflict/);
+		expect(run(repo, 'rev-parse', 'main')).toBe(baseBefore);
+		expect(run(wt, 'status', '--porcelain')).toBe('');
+		expect(page()).toBe('<p class="text-blue-500">hi</p>\n'); // saved as a version, not lost
+		// Resolve on the base side so the next tests can ship.
+		writeFileSync(join(repo, 'page.svelte'), '<p class="text-blue-500">hi</p>\n');
+		run(repo, 'commit', '-qam', 'Base agrees');
+		updateFromBase(wt);
+		expect(shipStatus(wt).behind).toBe(0);
+	});
+
 	test('ships as one commit on the base and restarts the design branch from it', () => {
 		const before = Number(run(repo, 'rev-list', '--count', 'main'));
 		writeFileSync(join(wt, 'page.svelte'), '<p class="p-6">hi</p>\n');
