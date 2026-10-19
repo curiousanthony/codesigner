@@ -18,8 +18,10 @@ import type {
 	Rect,
 	RecentProject,
 	RouteInfo,
+	ShipStatus,
 	SourceBranch,
 	SourceLoc,
+	Version,
 	UpdateInfo
 } from '@codesigner/protocol';
 import { errorMessage, inDesktop, invoke, on } from '#lib/api.js';
@@ -129,6 +131,9 @@ class EditorState {
 	codeCommands: { undo: () => void; redo: () => void; hasFocus: () => boolean } | null = null;
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
+
+	/** Version history dialog (⇧⌘H). */
+	historyOpen = $state(false);
 
 	/** Bumped by the menu's "New Design Branch…" to open that form in the branch menu. */
 	newBranchRequest = $state(0);
@@ -272,6 +277,7 @@ class EditorState {
 	}
 
 	closeProject() {
+		void this.flushAutosave();
 		session.set(null);
 		this.exitComponent();
 		this.startChoice = null;
@@ -306,6 +312,139 @@ class EditorState {
 		this.startChoice = null;
 		await this.updateSettings({ versioning: 'direct' });
 		await this.switchWorktree(this.project.root);
+	}
+
+	// --------------------------------------------------- versions & ship
+	/** Labels of edits not saved as a version yet (they become the checkpoint's message). */
+	private unsaved: string[] = [];
+	private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Design branches save a version on their own once editing pauses (never the main checkout). */
+	get autosaves(): boolean {
+		return this.project?.settings.versioning === 'branches' && !!this.branch && !this.branch.isMainCheckout;
+	}
+
+	noteChange(label: string) {
+		if (!this.autosaves) return;
+		this.unsaved.push(label);
+		if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+		this.autosaveTimer = setTimeout(() => void this.flushAutosave(), 20_000);
+	}
+
+	private async flushAutosave() {
+		if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+		this.autosaveTimer = null;
+		const labels = [...new Set(this.unsaved)];
+		this.unsaved = [];
+		if (!labels.length || !this.worktree || !this.autosaves) return;
+		const message = labels.length > 3 ? `${labels.slice(0, 3).join(', ')} +${labels.length - 3}` : labels.join(', ');
+		await invoke('branch:checkpoint', this.worktree, message, true).catch(() => null);
+	}
+
+	async saveVersion(message: string): Promise<string | null> {
+		if (!this.worktree) return null;
+		this.unsaved = [];
+		try {
+			const sha = await invoke('branch:checkpoint', this.worktree, message);
+			this.toast(sha ? m.ship_saved() : m.ship_nothing(), sha ? 'success' : 'info');
+			await this.refreshBranches();
+			return sha;
+		} catch (error) {
+			this.toast(errorMessage(error), 'error');
+			return null;
+		}
+	}
+
+	async versions(): Promise<Version[]> {
+		if (!this.worktree) return [];
+		await this.flushAutosave();
+		return invoke('branch:versions', this.worktree).catch(() => []);
+	}
+
+	async restoreVersion(version: Version) {
+		if (!this.worktree) return;
+		try {
+			await invoke('branch:restore', this.worktree, version.sha, m.history_restored_label({ name: version.subject }));
+			this.toast(m.history_restored(), 'success');
+			await this.refreshBranches();
+		} catch (error) {
+			this.toast(errorMessage(error), 'error');
+		}
+	}
+
+	async shipStatus(): Promise<ShipStatus | null> {
+		if (!this.worktree) return null;
+		await this.flushAutosave();
+		return invoke('branch:ship-status', this.worktree).catch(() => null);
+	}
+
+	/** Runs a git action that changes files under the dev server, reporting errors as toasts. */
+	private async gitAction<T>(run: () => Promise<T>): Promise<T | null> {
+		this.unsaved = [];
+		try {
+			return await run();
+		} catch (error) {
+			this.toast(errorMessage(error), 'error');
+			return null;
+		} finally {
+			await this.refreshBranches();
+		}
+	}
+
+	async ship(message: string): Promise<boolean> {
+		const worktree = this.worktree;
+		if (!worktree) return false;
+		const base = this.branch?.baseBranch ?? '';
+		const sha = await this.gitAction(() => invoke('branch:ship', worktree, message));
+		if (sha) this.toast(m.ship_done({ base }), 'success');
+		return !!sha;
+	}
+
+	async updateFromBase(): Promise<boolean> {
+		const worktree = this.worktree;
+		if (!worktree) return false;
+		const ok = await this.gitAction(() => invoke('branch:update-from-base', worktree).then(() => true));
+		if (ok) this.toast(m.ship_updated(), 'success');
+		return !!ok;
+	}
+
+	async pullRequest(title: string): Promise<string | null> {
+		const worktree = this.worktree;
+		if (!worktree) return null;
+		const result = await this.gitAction(() => invoke('branch:pull-request', worktree, title, m.ship_pr_body()));
+		if (!result) return null;
+		this.toast(result.created ? m.ship_pr_created() : m.ship_pr_opened(), 'success');
+		void invoke('app:open-external', result.url);
+		return result.url;
+	}
+
+	async renameBranch(from: string, to: string): Promise<boolean> {
+		const root = this.project?.root;
+		if (!root || !to.trim()) return false;
+		const name = await this.gitAction(() => invoke('branch:rename', root, from, to.trim()));
+		if (name && this.project?.settings.lastBranch === from) void this.updateSettings({ lastBranch: name });
+		return !!name;
+	}
+
+	async deleteBranch(name: string, force = false): Promise<boolean> {
+		const root = this.project?.root;
+		if (!root) return false;
+		if (this.branch?.name === name) {
+			// Leave it first: another design branch, else the start dialog.
+			const next = this.branches.find((b) => !b.isMainCheckout && b.name.startsWith('design/') && b.name !== name);
+			if (next) await this.switchWorktree(next.worktree);
+			else {
+				if (this.worktree) void invoke('devserver:stop', this.worktree);
+				this.worktree = null;
+			}
+		}
+		const ok = await this.gitAction(() => invoke('branch:delete', root, name, force).then(() => true));
+		if (ok && !this.worktree) this.startChoice = await invoke('branch:sources', root);
+		return !!ok;
+	}
+
+	async refreshBranches() {
+		if (this.project?.isGitRepo) this.branches = await invoke('branch:list', this.project.root).catch(() => this.branches);
 	}
 
 	/** Dismisses the start dialog: back to what was open, or closes a project that never opened. */
@@ -350,6 +489,7 @@ class EditorState {
 	}
 
 	async switchWorktree(worktree: string) {
+		await this.flushAutosave();
 		this.exitComponent();
 		if (this.worktree && this.worktree !== worktree) void invoke('devserver:stop', this.worktree);
 		this.worktree = worktree;
@@ -828,6 +968,7 @@ class EditorState {
 					return null;
 				}
 				for (const warning of result.warnings ?? []) this.toast(warning, 'info');
+				if (result.changes.length) this.noteChange(label);
 				return result;
 			} catch (error) {
 				this.toast(errorMessage(error), 'error');

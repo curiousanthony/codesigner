@@ -6,7 +6,9 @@ import type {
 	ProjectSettings,
 	RecentProject,
 	RouteInfo,
-	SourceBranch
+	ShipStatus,
+	SourceBranch,
+	Version
 } from './project.js';
 import type { CodeWriteRequest, CodeWriteResult, EditRequest, EditResult, ElementSource, FileChange } from './edits.js';
 import type { DesignTokens, TokenEdit } from './tokens.js';
@@ -61,7 +63,16 @@ export interface InvokeMap {
 	/** Branches to start a design from, most recently committed first, plus the suggested default. */
 	'branch:sources': (root: string) => { branches: SourceBranch[]; defaultBase: string };
 	'branch:create': (root: string, name: string, from?: string) => DesignBranch;
-	'branch:checkpoint': (worktree: string, message: string) => string | null;
+	'branch:checkpoint': (worktree: string, message: string, auto?: boolean) => string | null;
+	'branch:versions': (worktree: string) => Version[];
+	'branch:restore': (worktree: string, sha: string, label: string) => string | null;
+	'branch:ship-status': (worktree: string) => ShipStatus;
+	/** Lands the design on its base as one commit; returns its sha. */
+	'branch:ship': (worktree: string, message: string) => string;
+	'branch:update-from-base': (worktree: string) => void;
+	'branch:pull-request': (worktree: string, title: string, body: string) => { url: string; created: boolean };
+	'branch:rename': (root: string, from: string, to: string) => string;
+	'branch:delete': (root: string, name: string, force?: boolean) => void;
 
 	'devserver:start': (worktree: string) => DevServerState;
 	'devserver:stop': (worktree: string) => void;
@@ -118,6 +129,14 @@ export const INVOKE_CHANNELS = [
 	'branch:sources',
 	'branch:create',
 	'branch:checkpoint',
+	'branch:versions',
+	'branch:restore',
+	'branch:ship-status',
+	'branch:ship',
+	'branch:update-from-base',
+	'branch:pull-request',
+	'branch:rename',
+	'branch:delete',
 	'devserver:start',
 	'devserver:stop',
 	'devserver:state',

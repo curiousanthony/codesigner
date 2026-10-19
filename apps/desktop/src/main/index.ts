@@ -1,7 +1,24 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
 import fixPath from 'fix-path';
 import { resolve } from 'node:path';
-import { checkpoint, createDesignBranch, defaultBaseBranch, ensureIsolationRoute, listBranches, listSourceBranches, removeIsolationRoute, scanRoutes } from '@codesigner/engine';
+import {
+	createDesignBranch,
+	defaultBaseBranch,
+	deleteDesignBranch,
+	listVersions,
+	openPullRequest,
+	renameDesignBranch,
+	restoreVersion,
+	saveVersion,
+	shipStatus,
+	shipToBase,
+	updateFromBase,
+	ensureIsolationRoute,
+	listBranches,
+	listSourceBranches,
+	removeIsolationRoute,
+	scanRoutes
+} from '@codesigner/engine';
 import { EDITOR_APP_URL, EDITOR_DEV_URL, appVersion, isDev, preloadPath } from './env.js';
 import { handle, broadcast } from './ipc.js';
 import { handleAppScheme, registerAppScheme } from './protocol.js';
@@ -119,7 +136,19 @@ function registerHandlers() {
 	handle('branch:list', (root) => listBranches(root));
 	handle('branch:sources', (root) => ({ branches: listSourceBranches(root), defaultBase: defaultBaseBranch(root) }));
 	handle('branch:create', (root, name, from) => createDesignBranch(root, name, from));
-	handle('branch:checkpoint', (worktree, message) => checkpoint(worktree, message));
+	handle('branch:checkpoint', (worktree, message, auto) => saveVersion(worktree, message, auto));
+	handle('branch:versions', (worktree) => listVersions(worktree));
+	handle('branch:restore', (worktree, sha, label) => restoreVersion(worktree, sha, label));
+	handle('branch:ship-status', (worktree) => shipStatus(worktree));
+	handle('branch:ship', (worktree, message) => shipToBase(worktree, message));
+	handle('branch:update-from-base', (worktree) => updateFromBase(worktree));
+	handle('branch:pull-request', (worktree, title, body) => openPullRequest(worktree, title, body));
+	handle('branch:rename', (root, from, to) => renameDesignBranch(root, from, to));
+	handle('branch:delete', async (root, name, force) => {
+		const branch = listBranches(root).find((b) => b.name === name);
+		if (branch) await stopDevServer(branch.worktree);
+		deleteDesignBranch(root, name, force);
+	});
 
 	handle('devserver:start', (worktree) => startDevServer(worktree));
 	handle('devserver:stop', (worktree) => stopDevServer(worktree));

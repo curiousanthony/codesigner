@@ -11,3 +11,4 @@ export { analyzeClass, staticTokens } from './svelte/classes.js';
 export { EditError } from './svelte/structure.js';
 export * from './isolation.js';
 export { findTv } from './svelte/variants.js';
+export * from './versions.js';

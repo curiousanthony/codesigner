@@ -14,14 +14,16 @@
 		Rows3,
 		Grid2x2,
 		X,
-		Code
+		Code,
+		Pencil,
+		Trash2
 	} from '@lucide/svelte';
 	import { editor, type DrawTool } from '#lib/state/editor.svelte.js';
 	import { wrapSelection } from '#lib/state/commands.js';
-	import { invoke, errorMessage } from '#lib/api.js';
+	import { invoke } from '#lib/api.js';
 	import IconButton from '#lib/ui/IconButton.svelte';
 	import BranchPicker from '#lib/ui/BranchPicker.svelte';
-	import type { SourceBranch } from '@codesigner/protocol';
+	import type { ShipStatus, SourceBranch } from '@codesigner/protocol';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let menu = $state<'main' | 'insert' | 'layout' | 'branch' | 'ship' | null>(null);
@@ -90,17 +92,47 @@
 		await editor.switchWorktree(branch.worktree);
 	}
 
-	async function checkpoint() {
-		if (!editor.worktree) return;
-		try {
-			const sha = await invoke('branch:checkpoint', editor.worktree, shipMessage.trim() || m.ship_default_message());
-			editor.toast(sha ? m.ship_saved({ sha: sha.slice(0, 7) }) : m.ship_nothing(), sha ? 'success' : 'info');
+	// ------------------------------------------------- rename / delete
+	let renaming = $state<{ name: string; value: string } | null>(null);
+	let deleting = $state<{ name: string; unshipped: boolean } | null>(null);
+	$effect(() => {
+		if (menu !== 'branch') renaming = deleting = null;
+		else void editor.refreshBranches(); // fresh unsaved / ahead counts
+	});
+
+	async function submitRename() {
+		if (!renaming) return;
+		const { name, value } = renaming;
+		if (await editor.renameBranch(name, value)) renaming = null;
+	}
+
+	async function submitDelete() {
+		if (!deleting) return;
+		const { name } = deleting;
+		deleting = null;
+		// The confirmation said unshipped changes are lost: that is the consent to force it.
+		await editor.deleteBranch(name, true);
+	}
+
+	// ------------------------------------------------------------ ship
+	let ship = $state<ShipStatus | null>(null);
+	let shipBusy = $state(false);
+	$effect(() => {
+		if (menu !== 'ship') return;
+		ship = null;
+		void editor.shipStatus().then((status) => (ship = status));
+	});
+	const shipText = $derived(shipMessage.trim() || m.ship_default_message());
+	const nothingToShip = $derived(!!ship && ship.ahead === 0 && !ship.dirty);
+
+	async function shipAction(run: () => Promise<unknown>, close = true) {
+		shipBusy = true;
+		const result = await run();
+		shipBusy = false;
+		if (result && close) {
 			shipMessage = '';
 			menu = null;
-			if (editor.project) editor.branches = await invoke('branch:list', editor.project.root);
-		} catch (error) {
-			editor.toast(errorMessage(error), 'error');
-		}
+		} else if (menu === 'ship') ship = await editor.shipStatus();
 	}
 </script>
 
@@ -189,25 +221,55 @@
 				<div class="absolute top-full left-1/2 mt-1.5 w-80 -translate-x-1/2 rounded-popover bg-popover p-1.5 shadow-popover" role="menu">
 					<p class="px-2 pt-1 pb-1.5 text-[11px] text-muted">{m.branch_title()}</p>
 					{#each editor.branches as branch (branch.worktree)}
-						<button
-							type="button"
-							class="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-left hover:bg-control"
-							onclick={() => {
-								menu = null;
-								if (branch.worktree !== editor.worktree) void editor.switchWorktree(branch.worktree);
-							}}
-						>
-							<GitBranch class="size-3.5 shrink-0 {branch.isMainCheckout ? 'text-label' : 'text-accent'}" />
-							<span class="flex min-w-0 flex-1 flex-col">
-								<span class="truncate">{branch.name}</span>
-								<span class="truncate text-[10px] text-muted">
-									{branch.isMainCheckout ? m.branch_main_checkout() : m.branch_from({ base: branch.baseBranch ?? '?' })}
-									{#if branch.ahead}· {m.branch_ahead({ count: branch.ahead })}{/if}
-									{#if branch.dirty}· {m.branch_unsaved()}{/if}
+						{@const design = !branch.isMainCheckout && branch.name.startsWith('design/')}
+						{#if renaming?.name === branch.name}
+							<form class="flex h-9 items-center gap-1 px-1" onsubmit={(e) => { e.preventDefault(); void submitRename(); }}>
+								<span class="flex h-7 min-w-0 flex-1 items-center rounded-[6px] bg-control px-2">
+									<span class="text-muted">design/</span>
+									<!-- svelte-ignore a11y_autofocus -->
+									<input class="min-w-0 flex-1 bg-transparent outline-none" bind:value={renaming.value} autofocus onkeydown={(e) => e.key === 'Escape' && (renaming = null)} />
 								</span>
-							</span>
-							{#if branch.worktree === editor.worktree}<Check class="size-3.5 text-accent" />{/if}
-						</button>
+								<button type="submit" class="h-7 rounded-[6px] bg-accent px-2 text-white disabled:opacity-50" disabled={!renaming.value.trim()}>{m.branch_rename()}</button>
+							</form>
+						{:else if deleting?.name === branch.name}
+							<div class="flex min-h-9 items-center gap-1.5 rounded-[6px] bg-danger/10 px-2 py-1.5">
+								<span class="flex-1 text-[11px] text-fg">{deleting.unshipped ? m.branch_delete_unshipped({ name: branch.name }) : m.branch_delete_confirm({ name: branch.name })}</span>
+								<button type="button" class="h-6 rounded-[5px] px-2 text-label hover:bg-control" onclick={() => (deleting = null)}>{m.action_cancel()}</button>
+								<button type="button" class="h-6 rounded-[5px] bg-danger px-2 text-white" onclick={() => submitDelete()}>{m.branch_delete()}</button>
+							</div>
+						{:else}
+							<div class="group flex h-9 w-full items-center gap-2 rounded-[6px] px-2 hover:bg-control">
+								<button
+									type="button"
+									class="flex min-w-0 flex-1 items-center gap-2 text-left"
+									onclick={() => {
+										menu = null;
+										if (branch.worktree !== editor.worktree) void editor.switchWorktree(branch.worktree);
+									}}
+								>
+									<GitBranch class="size-3.5 shrink-0 {branch.isMainCheckout ? 'text-label' : 'text-accent'}" />
+									<span class="flex min-w-0 flex-1 flex-col">
+										<span class="truncate">{branch.name}</span>
+										<span class="truncate text-[10px] text-muted">
+											{branch.isMainCheckout ? m.branch_main_checkout() : m.branch_from({ base: branch.baseBranch ?? '?' })}
+											{#if branch.ahead}· {m.branch_ahead({ count: branch.ahead })}{/if}
+											{#if branch.dirty}· {m.branch_unsaved()}{/if}
+										</span>
+									</span>
+								</button>
+								{#if design}
+									<button type="button" class="hidden size-6 items-center justify-center rounded-[5px] text-label group-hover:flex hover:bg-control-hover" title={m.branch_rename()} aria-label={m.branch_rename()}
+										onclick={() => (renaming = { name: branch.name, value: branch.name.slice(7) })}>
+										<Pencil class="size-3" />
+									</button>
+									<button type="button" class="hidden size-6 items-center justify-center rounded-[5px] text-label group-hover:flex hover:bg-control-hover hover:text-danger" title={m.branch_delete()} aria-label={m.branch_delete()}
+										onclick={() => (deleting = { name: branch.name, unshipped: !!branch.ahead || !!branch.dirty })}>
+										<Trash2 class="size-3" />
+									</button>
+								{/if}
+								{#if branch.worktree === editor.worktree}<Check class="size-3.5 shrink-0 text-accent" />{/if}
+							</div>
+						{/if}
 					{/each}
 					{#if editor.project?.isGitRepo}
 						{#if creating}
@@ -272,14 +334,50 @@
 				{m.action_ship()}
 			</button>
 			{#if menu === 'ship'}
-				<div class="absolute top-full right-0 mt-1.5 w-80 rounded-popover bg-popover p-3 shadow-popover" role="dialog">
-					<p class="font-semibold text-fg-strong">{m.ship_title()}</p>
-					<p class="mt-1 text-[11px] text-label">{m.ship_description({ branch: editor.branch?.name ?? '' })}</p>
-					<input class="mt-2.5 h-[30px] w-full rounded-control bg-control px-2 outline-none" placeholder={m.ship_default_message()} bind:value={shipMessage} />
-					<button type="button" class="mt-2 h-[30px] w-full rounded-control bg-accent font-medium text-white hover:bg-accent-strong" onclick={checkpoint}>
-						{m.ship_save_version()}
-					</button>
-					<p class="mt-2.5 text-[11px] text-muted">{m.ship_pr_soon()}</p>
+				<div class="absolute top-full right-0 mt-1.5 flex w-[300px] flex-col gap-2.5 rounded-popover bg-popover p-3 shadow-popover" role="dialog" aria-label={m.ship_title()}>
+					<div>
+						<p class="font-semibold text-fg-strong">{m.ship_title()}</p>
+						<p class="mt-0.5 text-[11px] text-label">
+							{#if !ship}
+								…
+							{:else if nothingToShip}
+								{m.ship_up_to_date()}
+							{:else if ship.ahead === 0}
+								{m.ship_changes_since({ base: ship.base ?? '?' })}
+							{:else}
+								{m.ship_versions_since({ count: ship.ahead, base: ship.base ?? '?' })}{#if ship.dirty} · {m.ship_unsaved()}{/if}
+							{/if}
+						</p>
+					</div>
+					{#if ship && ship.behind > 0}
+						<div class="flex items-center gap-2 rounded-control bg-warning/10 px-2.5 py-2 text-[11px] text-label">
+							<span class="flex-1">{m.ship_behind({ base: ship.base ?? '', count: ship.behind })}</span>
+							<button type="button" class="rounded-[5px] bg-control px-2 py-1 font-medium text-fg hover:bg-control-hover disabled:opacity-50" disabled={shipBusy}
+								onclick={() => shipAction(() => editor.updateFromBase(), false)}>{m.ship_update()}</button>
+						</div>
+					{/if}
+					<input class="h-[30px] w-full rounded-control bg-control px-2 outline-none placeholder:text-muted" placeholder={m.ship_message_placeholder()} bind:value={shipMessage} />
+					{#if ship?.baseIsLocal}
+						<button type="button" class="h-[30px] w-full rounded-control bg-accent font-medium text-white hover:bg-accent-strong disabled:opacity-50"
+							disabled={shipBusy || nothingToShip || ship.baseDirty} onclick={() => shipAction(() => editor.ship(shipText))}>
+							{m.ship_merge({ base: ship.base ?? '' })}
+						</button>
+						{#if ship.baseDirty}<p class="text-[11px] text-warning">{m.ship_base_dirty({ base: ship.base ?? '' })}</p>{/if}
+					{:else if ship?.base}
+						<p class="text-[11px] text-label">{m.ship_remote_base({ base: ship.base })}</p>
+					{/if}
+					{#if ship?.remote}
+						<button type="button" class="h-[30px] w-full rounded-control font-medium disabled:opacity-50 {ship.baseIsLocal ? 'bg-control text-fg hover:bg-control-hover' : 'bg-accent text-white hover:bg-accent-strong'}"
+							disabled={shipBusy || nothingToShip} onclick={() => shipAction(() => editor.pullRequest(shipText))}>
+							{m.ship_pull_request()}
+						</button>
+					{/if}
+					<div class="flex items-center gap-1 border-t border-divider pt-2">
+						<button type="button" class="h-7 rounded-[6px] px-2 whitespace-nowrap text-label hover:bg-control disabled:opacity-50" disabled={shipBusy || !ship?.dirty}
+							onclick={() => shipAction(() => editor.saveVersion(shipText))}>{m.ship_save_version()}</button>
+						<span class="flex-1"></span>
+						<button type="button" class="h-7 rounded-[6px] px-2 whitespace-nowrap text-label hover:bg-control" onclick={() => ((menu = null), (editor.historyOpen = true))}>{m.ship_history()} <span class="text-muted">⇧⌘H</span></button>
+					</div>
 				</div>
 			{/if}
 		</div>

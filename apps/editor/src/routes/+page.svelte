@@ -8,6 +8,7 @@
 	import TopBar from '#lib/TopBar.svelte';
 	import Toasts from '#lib/Toasts.svelte';
 	import StartDesign from '#lib/StartDesign.svelte';
+	import VersionHistory from '#lib/VersionHistory.svelte';
 	import Canvas from '#lib/canvas/Canvas.svelte';
 	import CodePanel from '#lib/code/CodePanel.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
@@ -57,6 +58,9 @@
 				if (isTyping()) document.execCommand('paste');
 				else void pasteStyle();
 				break;
+			case 'version-history':
+				if (editor.branch && !editor.branch.isMainCheckout) editor.historyOpen = !editor.historyOpen;
+				break;
 			case 'new-branch':
 				editor.newBranchRequest++;
 				break;
@@ -94,7 +98,7 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
-		if (!editor.project || editor.startChoice || isTyping(event)) return;
+		if (!editor.project || editor.startChoice || editor.historyOpen || isTyping(event)) return;
 		const mod = event.metaKey || event.ctrlKey;
 		if (event.code === 'Space' && !event.repeat) {
 			editor.spaceHeld = true;
@@ -248,6 +252,9 @@
 
 {#if editor.startChoice}
 	<StartDesign />
+{/if}
+{#if editor.historyOpen && editor.project}
+	<VersionHistory />
 {/if}
 
 <Toasts />

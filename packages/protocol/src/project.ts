@@ -105,6 +105,34 @@ export interface SourceBranch {
 	subject: string;
 }
 
+/** A saved version of a design branch (a commit since its base). */
+export interface Version {
+	sha: string;
+	date: string;
+	subject: string;
+	/** Saved automatically while designing (vs. "Save version" / ship). */
+	auto: boolean;
+}
+
+export interface ShipStatus {
+	branch: string;
+	base: string | null;
+	/** The base is a local branch (shipping can merge into it); otherwise only a pull request. */
+	baseIsLocal: boolean;
+	/** Commits on the design branch not in the base, and the other way around. */
+	ahead: number;
+	behind: number;
+	/** Uncommitted design changes. */
+	dirty: boolean;
+	remote: string | null;
+	compareUrl: string | null;
+	/** GitHub CLI available to open pull requests. */
+	gh: boolean;
+	/** Where the base is checked out (shipping fast-forwards it there), and whether that copy has changes. */
+	baseWorktree: string | null;
+	baseDirty: boolean;
+}
+
 export type DevServerStatus = 'idle' | 'installing' | 'starting' | 'ready' | 'error' | 'stopped';
 
 export interface DevServerState {

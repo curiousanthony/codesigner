@@ -75,12 +75,13 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ⬜ Props-only components (no `tv()`): sample prop values per cell, required props
 - ⬜ Create a component from the selection (`⌥⌘K`), expose a property (the ⊕ binding)
 
-## M4 — Version control UX 🚧
+## M4 — Version control UX ✅ (except the visual diff)
 
 - ✅ Pick the branch to start designing from: first open asks (local and remote branches, newest first, or edit the checkout directly); "New design branch…" in the branch menu takes a base too
-- 🚧 Branch menu in the top bar: switch ✅, create ✅, rename, delete design branches; each keeps its own dev server
-- ⬜ Silent checkpoints + version history (`⇧⌘H`) with restore
-- ⬜ "Ship": merge into the base branch or open a PR (`gh`), with a visual diff summary
+- ✅ Branch menu in the top bar: switch, create (from any branch), rename, delete design branches (`⇧⌘B` new); each keeps its own dev server
+- ✅ Silent checkpoints (a version is saved 20 s after editing pauses, named after the edits) + version history (`⇧⌘H`) with restore (as a new version, nothing lost)
+- ✅ "Ship": merge into the base branch as one commit (fast-forwards the checkout when the base is checked out and clean, moves the branch otherwise), or push and open a PR (`gh`, else the compare page); "Update" when the base moved on
+- ⬜ Ship: visual diff summary (before/after screenshots of changed pages)
 - ⬜ Conflict-aware re-sync when files change outside the app (agents, editors, git)
 
 ## M5 — Comments ⬜

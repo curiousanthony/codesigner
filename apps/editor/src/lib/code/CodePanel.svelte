@@ -101,6 +101,7 @@
 		try {
 			const result = await invoke('source:write', editor.worktree, { file, content, base });
 			if (result.ok) {
+				if (result.changes.length) editor.noteChange(m.code_edit_label());
 				base = content;
 				dirty = view.state.doc.toString() !== content;
 				error = null;
