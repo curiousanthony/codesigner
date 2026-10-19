@@ -80,6 +80,7 @@ export function listSourceBranches(repoRoot: string): SourceBranch[] {
 	return [...local, ...remote.filter((b) => !names.has(b.name.slice(b.name.indexOf('/') + 1)))];
 }
 
+/** The main checkout and the design branches' worktrees. */
 export function listBranches(repoRoot: string): DesignBranch[] {
 	const out = tryGit(repoRoot, ['worktree', 'list', '--porcelain']);
 	if (out === null) return [];
@@ -93,6 +94,8 @@ export function listBranches(repoRoot: string): DesignBranch[] {
 		const ref = lines.find((l) => l.startsWith('branch '))?.slice(7) ?? null;
 		const name = ref?.replace(/^refs\/heads\//, '') ?? '(detached)';
 		const isMainCheckout = resolve(worktree) === mainRoot;
+		// Other tools' worktrees (editors, agents) aren't ours to show, and checking each one is slow.
+		if (!isMainCheckout && !name.startsWith(DESIGN_PREFIX)) continue;
 		const base = isMainCheckout ? null : tryGit(repoRoot, ['config', `branch.${name}.codesigner-base`]);
 		const dirty = (tryGit(worktree, ['status', '--porcelain']) ?? '')
 			.split('\n')

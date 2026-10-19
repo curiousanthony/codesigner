@@ -218,8 +218,9 @@
 				<ChevronDown class="size-3" />
 			</button>
 			{#if menu === 'branch'}
-				<div class="absolute top-full left-1/2 mt-1.5 w-80 -translate-x-1/2 rounded-popover bg-popover p-1.5 shadow-popover" role="menu">
+				<div class="absolute top-full left-1/2 mt-1.5 w-[340px] -translate-x-1/2 rounded-popover bg-popover p-1.5 shadow-popover" role="menu">
 					<p class="px-2 pt-1 pb-1.5 text-[11px] text-muted">{m.branch_title()}</p>
+					<div class="max-h-[50vh] overflow-y-auto">
 					{#each editor.branches as branch (branch.worktree)}
 						{@const design = !branch.isMainCheckout && branch.name.startsWith('design/')}
 						{#if renaming?.name === branch.name}
@@ -271,6 +272,7 @@
 							</div>
 						{/if}
 					{/each}
+					</div>
 					{#if editor.project?.isGitRepo}
 						{#if creating}
 							<form class="mt-1.5 flex flex-col gap-2 border-t border-divider px-0.5 pt-2" onsubmit={(e) => { e.preventDefault(); void createBranch(); }}>

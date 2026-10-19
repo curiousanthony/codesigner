@@ -43,6 +43,17 @@ describe('design branches', () => {
 	});
 });
 
+describe('design branch list', () => {
+	test("leaves out other tools' worktrees", () => {
+		const other = join(repo, '..', `other-tool-${Date.now()}`);
+		cleanup.push(other);
+		run(repo, 'worktree', 'add', '-q', '-b', 'cursor/abc', other, 'main');
+		const names = listBranches(repo).map((b) => b.name);
+		expect(names).toContain('main');
+		expect(names).not.toContain('cursor/abc');
+	});
+});
+
 describe('source branches', () => {
 	test('lists local branches, then remote-only ones, newest first', () => {
 		run(repo, 'branch', 'feature/login', 'main');
