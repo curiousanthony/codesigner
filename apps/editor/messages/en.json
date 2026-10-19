@@ -294,6 +294,7 @@
 	"state_default": "Default",
 	"state_editing": "Editing {state}: changes are saved as {prefix} classes, on every breakpoint.",
 	"style_breakpoint_scope": "Editing {name}: changes apply here and to smaller breakpoints",
+	"style_classless": "{name} doesn't take a class, so styles set here would be ignored. Style it inside the component.",
 	"style_copied": "Style copied ({count} classes)",
 	"style_dynamic_classes": "Conditional classes (edit in code)",
 	"style_empty": "Select a layer to edit its style.",

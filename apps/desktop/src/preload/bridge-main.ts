@@ -561,16 +561,18 @@ export function bridgeMain(config: BridgeConfig) {
 		const out: Record<string, Rect | null> = {};
 		for (const a of anchors) {
 			const key = locKey(a.loc);
+			const tagOf = (r: LayerRec) => (r.layer.kind === 'instance' ? r.layer.tag : r.els[0]?.localName);
+			// A layer added above can take the old line:column: only trust it if it's still the same element.
+			const same = (r: LayerRec | undefined) => !!r && tagOf(r) === a.loc.tag && (!a.text || textOf(r.els[0]) === a.text);
 			const twins = [...recs.values()].filter((r) => locKey(r.layer.loc) === key);
-			let rec: LayerRec | undefined = twins[a.occurrence] ?? twins[0];
+			let rec: LayerRec | undefined = [twins[a.occurrence], twins[0]].find(same);
 			if (!rec && a.text) {
 				// The location moved (lines added above): same text, preferring the same file and tag.
-				const same = [...recs.values()].filter((r) => r.els[0] && textOf(r.els[0]) === a.text);
-				const tagOf = (r: LayerRec) => (r.layer.kind === 'instance' ? r.layer.tag : r.els[0].localName);
+				const byText = [...recs.values()].filter((r) => r.els[0] && textOf(r.els[0]) === a.text);
 				rec =
-					same.find((r) => r.layer.loc.file === a.loc.file && tagOf(r) === a.loc.tag) ??
-					same.find((r) => r.layer.loc.file === a.loc.file) ??
-					same.find((r) => tagOf(r) === a.loc.tag);
+					byText.find((r) => r.layer.loc.file === a.loc.file && tagOf(r) === a.loc.tag) ??
+					byText.find((r) => r.layer.loc.file === a.loc.file) ??
+					byText.find((r) => tagOf(r) === a.loc.tag);
 			}
 			out[a.id] = rec ? unionRect(rec.els) : null;
 		}

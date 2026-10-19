@@ -294,6 +294,7 @@
 	"state_default": "Par défaut",
 	"state_editing": "Édition de l’état {state} : les modifications deviennent des classes {prefix}, sur tous les points de rupture.",
 	"style_breakpoint_scope": "Modification de {name} : s’applique ici et aux breakpoints plus petits",
+	"style_classless": "{name} n’accepte pas de class : les styles définis ici seraient ignorés. Stylez-le dans le composant.",
 	"style_copied": "Style copié ({count} classes)",
 	"style_dynamic_classes": "Classes conditionnelles (à modifier dans le code)",
 	"style_empty": "Sélectionnez un calque pour modifier son style.",

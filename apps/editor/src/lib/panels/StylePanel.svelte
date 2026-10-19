@@ -86,6 +86,8 @@
 		);
 	});
 
+	/** An instance of a component that takes no `class`: styling it here would write an ignored attribute. */
+	const classless = $derived(info?.kind === 'instance' && !!component && component.acceptsClass === false);
 	const isFlex = $derived(!!c && c.display.includes('flex'));
 	const isGrid = $derived(!!c && c.display.includes('grid'));
 	const hasLayout = $derived(isFlex || isGrid);
@@ -439,7 +441,7 @@
 		</div>
 	{/if}
 
-	{#if info.editable && !variantContext && !editor.editingComponent}
+	{#if info.editable && !variantContext && !editor.editingComponent && !classless}
 		<div class="flex flex-col gap-2 border-b border-divider px-4 py-2.5">
 			<Segmented
 				options={[
@@ -522,7 +524,12 @@
 		</div>
 	{/if}
 
-	{#if c}
+	{#if c && classless}
+		<div class="m-3 flex flex-col gap-2 rounded-control bg-component-tint p-2.5 text-[11px] text-component">
+			<p>{m.style_classless({ name: component?.name ?? '' })}</p>
+			<button type="button" class="h-[28px] rounded-control bg-component font-medium text-white" onclick={editComponent}>{m.component_edit()}</button>
+		</div>
+	{:else if c}
 		<!-- Position -->
 		<Section title={m.section_position()}>
 			<Row label={m.label_type()} overridden={overridden('position')}>

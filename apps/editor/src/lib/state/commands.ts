@@ -125,7 +125,11 @@ export async function pasteStyle() {
 	if (!copiedStyle) return void editor.toast(m.style_nothing_copied());
 	if (!requireSelection()) return;
 	const add = copiedStyle;
-	const infos = editor.selection.infos.filter((i) => i.loc && i.editable);
+	// Instances of components that take no `class` would ignore it.
+	const ignoresClass = (i: (typeof editor.selection.infos)[number]) =>
+		i.kind === 'instance' && editor.components.find((c) => c.exportedAs.includes(i.componentTag ?? '') || c.name === i.componentTag || c.file === i.definitionFile)?.acceptsClass === false;
+	const infos = editor.selection.infos.filter((i) => i.loc && i.editable && !ignoresClass(i));
+	if (!infos.length) return void editor.toast(m.style_classless({ name: editor.selected?.componentTag ?? '' }));
 	const ops = await Promise.all(
 		infos.map(async (info) => ({
 			type: 'classes' as const,
