@@ -120,7 +120,7 @@ Verified by `e2e/smoke.ts` on the fixture (save → restore → ship into the ch
 ## M8 — Polish ⬜
 
 - ⬜ French translation
-- ⬜ Dark theme for the editor itself
+- ✅ Dark theme for the editor itself (Framer-calibrated tokens), View → Appearance: System / Light / Dark, remembered; the canvas keeps its own dark preview
 - ⬜ Command palette (`⌘K`)
 - ⬜ Performance: snapshot far-away frames, cap live webviews
 

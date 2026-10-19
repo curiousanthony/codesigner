@@ -1,4 +1,5 @@
 import type {
+	EditorTheme,
 	AppInfo,
 	Breakpoint,
 	CanvasMode,
@@ -286,8 +287,10 @@ class EditorState {
 			if (origin === 'editor') for (const file of files) this.pendingHmr.add(file);
 			if (this.project?.cssEntry && files.includes(this.project.cssEntry)) void this.loadTokens();
 		});
+		on('app:theme', ({ theme }) => applyTheme(theme));
 		const [info, recent] = await Promise.all([invoke('app:info'), invoke('project:recent')]);
 		this.appInfo = info;
+		applyTheme(info.theme);
 		this.recent = recent;
 		void invoke('app:check-update').then((u) => (this.update = u));
 		// The window reloaded (e.g. a dev hot reload): reopen what was open.
@@ -1262,6 +1265,12 @@ class EditorState {
 		this.syncHighlights();
 		for (const frame of this.frames.values()) frame.send({ type: 'set-scope', files });
 	}
+}
+
+/** System follows macOS (prefers-color-scheme); light and dark pin the editor's tokens (layout.css). */
+function applyTheme(theme: EditorTheme | undefined) {
+	if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+	else delete document.documentElement.dataset.theme;
 }
 
 export const editor = new EditorState();

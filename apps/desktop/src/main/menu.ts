@@ -1,10 +1,17 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron';
+import type { EditorTheme } from '@codesigner/protocol';
 
 /**
  * Native menu. Canvas commands (undo, zoom, wrap in stack…) are forwarded to the
  * editor, which decides whether a text field or the canvas handles them.
  */
-export function buildMenu(send: (command: string) => void): Menu {
+export function buildMenu(send: (command: string) => void, theme: { current: EditorTheme; set: (theme: EditorTheme) => void }): Menu {
+	const appearance = (label: string, value: EditorTheme): MenuItemConstructorOptions => ({
+		label,
+		type: 'radio',
+		checked: theme.current === value,
+		click: () => theme.set(value)
+	});
 	const cmd = (label: string, command: string, accelerator?: string): MenuItemConstructorOptions => ({
 		label,
 		accelerator,
@@ -72,6 +79,8 @@ export function buildMenu(send: (command: string) => void): Menu {
 				cmd('Reload Canvas', 'reload-canvas', 'CmdOrCtrl+R'),
 				cmd('Toggle Interact Mode', 'toggle-interact', 'CmdOrCtrl+E'),
 				cmd('Toggle Code', 'toggle-code', 'CmdOrCtrl+J'),
+				{ type: 'separator' },
+				{ label: 'Appearance', submenu: [appearance('System', 'system'), appearance('Light', 'light'), appearance('Dark', 'dark')] },
 				{ type: 'separator' },
 				{ role: 'toggleDevTools', label: 'Editor Developer Tools' },
 				cmd('Canvas Developer Tools', 'canvas-devtools', 'CmdOrCtrl+Alt+I'),

@@ -28,7 +28,11 @@ export interface AppInfo {
 	isDev: boolean;
 	/** CODESIGNER_NO_AUTOSAVE: never save versions on its own (test runs against real repositories). */
 	noAutosave?: boolean;
+	/** The editor's own appearance (View → Appearance); the canvas has its separate dark preview. */
+	theme: EditorTheme;
 }
+
+export type EditorTheme = 'system' | 'light' | 'dark';
 
 export interface UpdateInfo {
 	current: string;
@@ -107,6 +111,7 @@ export interface EventMap {
 	'devserver:log': DevServerLog;
 	'source:changed': { worktree: string; files: string[]; origin: 'editor' | 'external' };
 	'menu:command': { command: string };
+	'app:theme': { theme: EditorTheme };
 }
 
 type Fn = (...args: never[]) => unknown;
@@ -170,5 +175,6 @@ export const EVENT_CHANNELS = [
 	'devserver:state',
 	'devserver:log',
 	'source:changed',
-	'menu:command'
+	'menu:command',
+	'app:theme'
 ] as const satisfies readonly (keyof EventMap)[];

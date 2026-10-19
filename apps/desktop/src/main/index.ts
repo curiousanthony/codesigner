@@ -40,6 +40,11 @@ import {
 import { devServerLogs, devServerState, startDevServer, stopAllDevServers, stopDevServer } from './devservers.js';
 import { checkForUpdate } from './updates.js';
 import { buildMenu } from './menu.js';
+import { JsonStore } from './store.js';
+import type { EditorTheme } from '@codesigner/protocol';
+
+/** The editor's appearance, chosen in View → Appearance. */
+const appearance = new JsonStore<{ theme: EditorTheme }>('codesigner-appearance', { theme: 'system' });
 import { forceStates } from './states.js';
 import { registerSourceHandlers, stopWatchingSources } from './source.js';
 
@@ -102,7 +107,8 @@ function registerHandlers() {
 		locale: app.getLocale(),
 		guestPreload: `file://${preloadPath('guest')}`,
 		isDev,
-		noAutosave: process.env.CODESIGNER_NO_AUTOSAVE === '1'
+		noAutosave: process.env.CODESIGNER_NO_AUTOSAVE === '1',
+		theme: appearance.get('theme')
 	}));
 	handle('app:check-update', () => checkForUpdate());
 	handle('app:open-external', (url) => {
@@ -178,7 +184,15 @@ app.whenReady().then(() => {
 	handleAppScheme();
 	configurePreviewSession();
 	registerHandlers();
-	Menu.setApplicationMenu(buildMenu((command) => broadcast('menu:command', { command })));
+	Menu.setApplicationMenu(
+		buildMenu((command) => broadcast('menu:command', { command }), {
+			current: appearance.get('theme'),
+			set: (theme) => {
+				appearance.set('theme', theme);
+				broadcast('app:theme', { theme });
+			}
+		})
+	);
 	createWindow();
 
 	app.on('activate', () => {
