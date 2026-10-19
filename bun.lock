@@ -63,6 +63,7 @@
       "dependencies": {
         "@codesigner/protocol": "workspace:*",
         "@tailwindcss/node": "4.3.3",
+        "is-reference": "3.0.3",
         "magic-string": "^1.4.3",
         "postcss": "^8.5.30",
         "svelte": "^5.57.2",

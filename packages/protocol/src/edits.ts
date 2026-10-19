@@ -57,7 +57,9 @@ export type EditOp =
 			remove: string[];
 			add: string[];
 	  }
-	| { type: 'add-variant'; file: string; axis: string; value: string; copyFrom?: string };
+	| { type: 'add-variant'; file: string; axis: string; value: string; copyFrom?: string }
+	/** Create component from the selection: moves the markup to `file`, leaves `<Name …props />` and its import. */
+	| { type: 'extract-component'; target: SourceLoc; name: string; file: string; importPath: string };
 
 /** `import { Button } …`, `import * as Card …` or `import NavItem …` for markup that uses a component. */
 export interface ImportSpec {
@@ -81,6 +83,8 @@ export interface FileChange {
 	file: string;
 	before: string;
 	after: string;
+	/** The edit created this file (undo deletes it). */
+	created?: boolean;
 }
 
 export interface EditResult {

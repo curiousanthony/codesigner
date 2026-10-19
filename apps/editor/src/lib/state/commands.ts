@@ -183,6 +183,25 @@ export async function insertImage(image: ImageAsset, frameId: string, target: Dr
 	if (loc) pendingSelect({ ...loc, tag: 'img' }, frameId);
 }
 
+/** ⌥⌘K: moves the selected layer into src/lib/components/<Name>.svelte and uses it in place. */
+export async function createComponent(name: string): Promise<boolean> {
+	const info = editor.selected;
+	if (!info?.loc || !info.editable) {
+		editor.toast(m.cmd_select_first());
+		return false;
+	}
+	const file = `src/lib/components/${name}.svelte`;
+	const result = await editor.editWithResult(m.edit_create_component({ name }), [
+		{ type: 'extract-component', target: { ...info.loc, tag: info.componentTag ?? info.tag }, name, file, importPath: `$lib/components/${name}.svelte` }
+	]);
+	if (!result?.changes.length) return false;
+	void editor.loadComponents();
+	editor.toast(m.component_created({ file }), 'success');
+	const loc = result.created?.[0];
+	if (loc) pendingSelect({ ...loc, tag: name });
+	return true;
+}
+
 export async function unwrapSelection() {
 	const info = editor.selected;
 	if (!info?.loc || info.kind !== 'element') return;

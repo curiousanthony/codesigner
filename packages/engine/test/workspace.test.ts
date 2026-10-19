@@ -174,6 +174,72 @@ describe('structure', () => {
 		expect(result.created).toEqual([locOf(bareText, '<NavItem', bare)]);
 	});
 
+	test('creates a component from the selection: props, imports, usage, undo deletes the file', async () => {
+		const page = 'src/routes/test/extract.svelte';
+		const { writeFileSync, existsSync: exists } = await import('node:fs');
+		const text = () => readFileSync(join(project.dir, page), 'utf8');
+		writeFileSync(
+			join(project.dir, page),
+			[
+				'<script lang="ts">',
+				"\timport * as Card from '$lib/components/ui/card';",
+				"\timport { projects } from '$lib/projects';",
+				"\tlet { title = 'Overview' } = $props();",
+				'\tlet count = $state(0);',
+				'</script>',
+				'',
+				'<section class="grid gap-4">',
+				'\t{#each projects as project (project.slug)}',
+				'\t\t<Card.Root class="p-4">',
+				'\t\t\t<Card.Title>{project.name} · {title}</Card.Title>',
+				'\t\t\t{#each project.tags as tag}<span>{tag}</span>{/each}',
+				'\t\t\t<button onclick={() => console.log(project.slug)}>Open</button>',
+				'\t\t</Card.Root>',
+				'\t{/each}',
+				'\t<button onclick={() => count++}>{count}</button>',
+				'</section>',
+				''
+			].join('\n')
+		);
+		const result = await ws.apply({
+			label: 'Create component',
+			ops: [{ type: 'extract-component', target: locOf(text(), '<Card.Root', page), name: 'ProjectCard', file: 'src/lib/components/ProjectCard.svelte', importPath: '$lib/components/ProjectCard.svelte' }]
+		});
+		expect(result.ok).toBe(true);
+		const component = readFileSync(join(project.dir, 'src/lib/components/ProjectCard.svelte'), 'utf8');
+		expect(component).toBe(
+			[
+				'<script lang="ts">',
+				"\timport * as Card from '$lib/components/ui/card';",
+				'\tlet { project, title } = $props();',
+				'</script>',
+				'',
+				'<Card.Root class="p-4">',
+				'\t<Card.Title>{project.name} · {title}</Card.Title>',
+				'\t{#each project.tags as tag}<span>{tag}</span>{/each}',
+				'\t<button onclick={() => console.log(project.slug)}>Open</button>',
+				'</Card.Root>',
+				''
+			].join('\n')
+		);
+		expect(text()).toContain('\t\t<ProjectCard {project} {title} />\n');
+		expect(text()).toContain("import ProjectCard from '$lib/components/ProjectCard.svelte';");
+		expect(result.created).toEqual([locOf(text(), '<ProjectCard', page)]);
+		// Two-way state stays in the page.
+		const refused = await ws.apply({
+			label: 'Create component',
+			ops: [{ type: 'extract-component', target: locOf(text(), '<button onclick={() => count++}', page), name: 'Counter', file: 'src/lib/components/Counter.svelte', importPath: '$lib/components/Counter.svelte' }]
+		});
+		expect(refused.ok).toBe(false);
+		expect(refused.error).toContain('count');
+		ws.undo();
+		expect(exists(join(project.dir, 'src/lib/components/ProjectCard.svelte'))).toBe(false);
+		expect(text()).toContain('<Card.Root class="p-4">');
+		ws.redo();
+		expect(exists(join(project.dir, 'src/lib/components/ProjectCard.svelte'))).toBe(true);
+		ws.undo();
+	});
+
 	test('reports where a drawn layer landed next to look-alike siblings', async () => {
 		const page = 'src/routes/test/look-alike.svelte';
 		const { writeFileSync } = await import('node:fs');

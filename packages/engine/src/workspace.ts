@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import MagicString from 'magic-string';
 import { parse } from 'svelte/compiler';
 import type {
@@ -13,6 +13,7 @@ import type {
 	EditResult,
 	ElementSource,
 	FileChange,
+	ImportSpec,
 	SourceAttribute,
 	SourceLoc,
 	TokenEdit
@@ -20,6 +21,7 @@ import type {
 import { locKey } from '@codesigner/protocol';
 import { SvelteDoc, type ElementLike, type Located } from './svelte/doc.js';
 import { ensureImport } from './svelte/imports.js';
+import { extractComponent } from './svelte/extract.js';
 import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
 import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
@@ -94,7 +96,8 @@ export class Workspace {
 	}
 
 	private write(file: string, text: string) {
-		const prev = this.read(file);
+		const prev = existsSync(this.abs(file)) ? this.read(file) : '';
+		mkdirSync(dirname(this.abs(file)), { recursive: true });
 		const versions = this.history.get(file) ?? [];
 		versions.unshift(prev);
 		this.history.set(file, versions.slice(0, HISTORY_DEPTH));
@@ -145,6 +148,8 @@ export class Workspace {
 			case 'variant-classes':
 			case 'add-variant':
 				return [];
+			case 'extract-component':
+				return [op.target];
 			default:
 				return [op.target];
 		}
@@ -220,6 +225,8 @@ export class Workspace {
 			case 'rename-tag':
 				renameTag(doc, s, this.locate(doc, op.target).node, op.tag);
 				break;
+			case 'extract-component':
+				break; // spans two files: done in apply()
 		}
 		const next = s.toString();
 		// Never write a file Svelte can't parse.
@@ -234,7 +241,7 @@ export class Workspace {
 	async apply(request: EditRequest): Promise<EditResult> {
 		const warnings: string[] = [];
 		const created: SourceLoc[] = [];
-		const texts = new Map<string, { before: string; current: string }>();
+		const texts = new Map<string, { before: string; current: string; created?: boolean }>();
 		try {
 			for (const op of request.ops) {
 				const file = this.fileOf(op);
@@ -243,20 +250,23 @@ export class Workspace {
 				const previous = entry.current;
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
 				if (op.type === 'insert') {
-					let loc = insertedAt(file, previous, entry.current, op.markup);
-					if (op.imports?.length) {
-						// Imports go in after locating the markup (the script usually sits above it, shifting lines).
-						const before = entry.current;
-						const doc = new SvelteDoc(before);
-						const s = new MagicString(before);
-						for (const spec of op.imports) ensureImport(doc, s, spec);
-						entry.current = s.toString();
-						const at = doc.offsetOf(loc.line, loc.column);
-						let changedAt = 0;
-						while (changedAt < before.length && before[changedAt] === entry.current[changedAt]) changedAt++;
-						if (changedAt <= at) loc = { ...loc, line: loc.line + entry.current.split('\n').length - before.split('\n').length };
-					}
-					created.push(loc);
+					// Imports go in after locating the markup (the script usually sits above it, shifting lines).
+					const withImports = addImports(entry.current, op.imports ?? [], insertedAt(file, previous, entry.current, op.markup));
+					entry.current = withImports.text;
+					created.push(withImports.loc);
+				}
+				if (op.type === 'extract-component') {
+					if (existsSync(this.abs(op.file))) throw new EditError(`${op.file} already exists. Pick another name.`);
+					const doc = new SvelteDoc(previous);
+					const target = this.locate(doc, op.target).node;
+					const extraction = extractComponent(doc, target, op.name);
+					const s = new MagicString(previous);
+					s.overwrite(target.start, target.end, extraction.usage);
+					const at = doc.lineColumnOf(target.start);
+					const withImport = addImports(s.toString(), [{ kind: 'default', local: op.name, from: op.importPath }], { file, ...at });
+					entry.current = withImport.text;
+					created.push(withImport.loc);
+					texts.set(op.file, { before: '', current: extraction.component, created: true });
 				}
 				if (op.type === 'move') created.push(insertedAt(file, previous, entry.current, previous.split('\n')[op.target.line - 1].slice(op.target.column)));
 				texts.set(file, entry);
@@ -266,10 +276,10 @@ export class Workspace {
 		}
 
 		const changes: FileChange[] = [];
-		for (const [file, { before, current }] of texts) {
+		for (const [file, { before, current, created: isNew }] of texts) {
 			if (before === current) continue;
 			this.write(file, current);
-			changes.push({ file, before, after: current });
+			changes.push({ file, before, after: current, ...(isNew ? { created: true } : {}) });
 		}
 		if (changes.length) this.record(request, changes);
 		return { ok: true, changes, warnings, ...(created.length ? { created } : {}) };
@@ -334,13 +344,18 @@ export class Workspace {
 		for (const change of entry.changes) {
 			const expected = direction === 'undo' ? change.after : change.before;
 			const target = direction === 'undo' ? change.before : change.after;
-			const current = this.read(change.file);
-			if (hash(current) !== hash(expected)) {
+			const exists = existsSync(this.abs(change.file));
+			const current = exists ? this.read(change.file) : '';
+			if (hash(current) !== hash(expected) || (change.created && direction === 'redo' && exists)) {
 				throw new EditError(`${change.file} changed outside Codesigner since this edit; ${direction} isn't safe`);
 			}
-			applied.push({ file: change.file, before: current, after: target });
+			applied.push({ file: change.file, before: current, after: target, ...(change.created ? { created: true } : {}) });
 		}
-		for (const change of applied) this.write(change.file, change.after);
+		for (const change of applied) {
+			// Undoing the creation of a file (Create component) deletes it.
+			if (change.created && direction === 'undo') rmSync(this.abs(change.file));
+			else this.write(change.file, change.after);
+		}
 		return applied;
 	}
 
@@ -465,4 +480,17 @@ function insertedAt(file: string, before: string, after: string, markup: string)
 	if (start < 0) start = after.indexOf('<', prefix);
 	const lines = after.slice(0, start).split('\n');
 	return { file, line: lines.length, column: lines[lines.length - 1].length };
+}
+
+/** Adds imports to a file and shifts `loc` (a layer in its markup) by the lines they add above it. */
+function addImports(text: string, imports: ImportSpec[], loc: SourceLoc): { text: string; loc: SourceLoc } {
+	if (!imports.length) return { text, loc };
+	const doc = new SvelteDoc(text);
+	const s = new MagicString(text);
+	for (const spec of imports) ensureImport(doc, s, spec);
+	const next = s.toString();
+	const at = doc.offsetOf(loc.line, loc.column);
+	let changedAt = 0;
+	while (changedAt < text.length && text[changedAt] === next[changedAt]) changedAt++;
+	return { text: next, loc: changedAt <= at ? { ...loc, line: loc.line + next.split('\n').length - text.split('\n').length } : loc };
 }

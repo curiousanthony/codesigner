@@ -76,7 +76,8 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`
 - ✅ Component isolation page served by the app's own dev server (git-ignored route `src/routes/__codesigner`, root layout only)
 - ⬜ Props-only components (no `tv()`): sample prop values per cell, required props
-- ⬜ Create a component from the selection (`⌥⌘K`), expose a property (the ⊕ binding)
+- ✅ Create a component from the selection (`⌥⌘K`, or the component button in the Style panel): the markup moves to `src/lib/components/<Name>.svelte`, values it reads from the page (script variables, `{#each}` items, snippets) become props, its imports are copied, two-way state is refused; undo deletes the file
+- ⬜ Expose a property (the ⊕ binding): turn a static value inside a component into a prop
 
 ## M4 — Version control UX 🚧
 

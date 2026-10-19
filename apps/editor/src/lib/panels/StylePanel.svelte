@@ -408,6 +408,11 @@
 				<Repeat class="size-3" />×{info.repeatCount}
 			</span>
 		{/if}
+		{#if info.editable && !editor.editingComponent && !multi}
+			<button type="button" class="flex size-6 items-center justify-center rounded-md text-component hover:bg-component-tint" title={m.component_create_hint()} aria-label={m.component_create_title()} onclick={() => (editor.createComponentOpen = true)}>
+				<Component class="size-3.5" />
+			</button>
+		{/if}
 		<button type="button" class="flex size-6 items-center justify-center rounded-md text-label hover:bg-control" title={m.code_show()} aria-label={m.code_show()} onclick={openInCode}>
 			<Code class="size-3.5" />
 		</button>

@@ -54,6 +54,8 @@ export function buildMenu(send: (command: string) => void): Menu {
 				{ role: 'paste' },
 				{ role: 'selectAll' },
 				{ type: 'separator' },
+				cmd('Create Component…', 'create-component', 'CmdOrCtrl+Alt+K'),
+				{ type: 'separator' },
 				cmd('Copy Style', 'copy-style', 'CmdOrCtrl+Alt+C'),
 				cmd('Paste Style', 'paste-style', 'CmdOrCtrl+Alt+V')
 			]

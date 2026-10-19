@@ -153,6 +153,9 @@ class EditorState {
 	editState = $state<EditState>('default');
 	private forcedKey = '';
 
+	/** "Create component" naming dialog (⌥⌘K). */
+	createComponentOpen = $state(false);
+
 	/** Version history dialog (⇧⌘H). */
 	historyOpen = $state(false);
 

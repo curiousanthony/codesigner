@@ -9,6 +9,7 @@
 	import Toasts from '#lib/Toasts.svelte';
 	import StartDesign from '#lib/StartDesign.svelte';
 	import VersionHistory from '#lib/VersionHistory.svelte';
+	import CreateComponent from '#lib/CreateComponent.svelte';
 	import Canvas from '#lib/canvas/Canvas.svelte';
 	import CodePanel from '#lib/code/CodePanel.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
@@ -58,6 +59,10 @@
 				if (isTyping()) document.execCommand('paste');
 				else void pasteStyle();
 				break;
+			case 'create-component':
+				if (editor.selected?.editable && !editor.editingComponent) editor.createComponentOpen = true;
+				else editor.toast(m.cmd_select_first());
+				break;
 			case 'version-history':
 				if (editor.branch && !editor.branch.isMainCheckout) editor.historyOpen = !editor.historyOpen;
 				break;
@@ -99,7 +104,7 @@
 
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Alt') editor.altHeld = true;
-		if (!editor.project || editor.startChoice || editor.historyOpen || isTyping(event)) return;
+		if (!editor.project || editor.startChoice || editor.historyOpen || editor.createComponentOpen || isTyping(event)) return;
 		const mod = event.metaKey || event.ctrlKey;
 		if (event.code === 'Space' && !event.repeat) {
 			editor.spaceHeld = true;
@@ -257,6 +262,9 @@
 {/if}
 {#if editor.historyOpen && editor.project}
 	<VersionHistory />
+{/if}
+{#if editor.createComponentOpen && editor.selected}
+	<CreateComponent />
 {/if}
 
 <Toasts />
