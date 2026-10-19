@@ -24,3 +24,6 @@ apps/editor/project.inlang/cache/
 
 # Codesigner runtime files inside fixture projects
 fixtures/*/.codesigner/cache/
+
+# Desktop packaging resources (icon), unlike other build outputs
+!apps/desktop/build/

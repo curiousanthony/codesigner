@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+	body.preview { background: #f2f2f4 !important; }
+	html, body { margin: 0; width: 1024px; height: 1024px; background: transparent; overflow: hidden; }
+	/* Apple's macOS grid: an 824px squircle centered on a 1024px canvas, with a soft drop shadow. */
+	.shadow { position: absolute; left: 100px; top: 100px; width: 824px; height: 824px; filter: drop-shadow(0 14px 18px rgba(20, 10, 60, 0.28)) drop-shadow(0 2px 4px rgba(20, 10, 60, 0.2)); }
+	.tile { position: absolute; inset: 0; border-radius: 185px; overflow: hidden;
+		background:
+			radial-gradient(60% 55% at 18% 12%, #7cc4ff 0%, transparent 60%),
+			radial-gradient(55% 60% at 92% 20%, #ff7ad9 0%, transparent 62%),
+			radial-gradient(70% 60% at 85% 95%, #5b3dff 0%, transparent 65%),
+			radial-gradient(60% 60% at 10% 90%, #1fd1c1 0%, transparent 60%),
+			linear-gradient(160deg, #3a6bff 0%, #6a3cff 55%, #2a1a8f 100%);
+	}
+	/* Soft orbs the glass refracts. */
+	.orb { position: absolute; border-radius: 50%; filter: blur(30px); }
+	.o1 { left: 420px; top: 120px; width: 300px; height: 300px; background: #ffb2f0; opacity: .75; }
+	.o2 { left: 120px; top: 430px; width: 260px; height: 260px; background: #6ff3ff; opacity: .7; }
+	.o3 { left: 470px; top: 520px; width: 240px; height: 240px; background: #8b6bff; opacity: .9; }
+
+	/* The glass layer: a frame being designed. */
+	.glass { position: absolute; left: 170px; top: 210px; width: 430px; height: 380px; border-radius: 74px;
+		background: linear-gradient(145deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,.14) 45%, rgba(255,255,255,.08) 100%);
+		backdrop-filter: blur(26px) saturate(170%);
+		box-shadow:
+			inset 0 3px 0 rgba(255,255,255,.9),
+			inset 2px 0 0 rgba(255,255,255,.35),
+			inset 0 -3px 6px rgba(40,10,120,.25),
+			inset 0 0 0 1.5px rgba(255,255,255,.35),
+			0 30px 60px rgba(30, 10, 90, .35);
+	}
+	/* Rim light that bends around the top-left corner, like refraction on Liquid Glass. */
+	.glass::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 3px;
+		background: linear-gradient(140deg, rgba(255,255,255,.95), rgba(255,255,255,0) 35%, rgba(255,255,255,0) 70%, rgba(255,255,255,.55));
+		-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+	/* Content lines inside the frame: a heading and two lines of text. */
+	.line { position: absolute; left: 62px; height: 30px; border-radius: 15px; background: rgba(255,255,255,.88); box-shadow: 0 2px 6px rgba(40,10,120,.18), inset 0 -2px 0 rgba(120,100,255,.25); }
+	.l1 { top: 70px; width: 210px; height: 40px; border-radius: 20px; }
+	.l2 { top: 150px; width: 300px; opacity: .55; }
+	.l3 { top: 205px; width: 240px; opacity: .55; }
+	.chip { position: absolute; left: 62px; top: 275px; width: 130px; height: 50px; border-radius: 25px; background: linear-gradient(180deg, #ffffff, #e9e4ff); box-shadow: 0 6px 14px rgba(40,10,120,.3), inset 0 -3px 0 rgba(110,80,255,.25); }
+
+	/* Selection outline with Framer-style corner handles. */
+	.sel { position: absolute; left: 140px; top: 180px; width: 490px; height: 440px; border-radius: 22px; border: 5px solid rgba(255,255,255,.92); box-sizing: border-box; box-shadow: 0 0 22px rgba(255,255,255,.35); }
+	.h { position: absolute; width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(180deg, #fff, #ece8ff); box-shadow: 0 6px 12px rgba(30,10,90,.35), inset 0 -3px 0 rgba(110,80,255,.3), inset 0 0 0 5px #5b47ff; }
+
+	/* Cursor: solid glass-white with a bright top edge and a soft shadow. */
+	.cursor { position: absolute; left: 520px; top: 500px; width: 230px; height: 290px; filter: drop-shadow(0 22px 26px rgba(25,8,80,.45)); }
+</style>
+</head>
+<body class="">
+	<svg width="0" height="0" style="position:absolute">
+		<defs>
+			<clipPath id="squircle" clipPathUnits="objectBoundingBox"><path id="sq" /></clipPath>
+			<linearGradient id="cur" x1="0" y1="0" x2="0.4" y2="1">
+				<stop offset="0" stop-color="#ffffff" />
+				<stop offset="1" stop-color="#e6e0ff" />
+			</linearGradient>
+			<linearGradient id="curEdge" x1="0" y1="0" x2="1" y2="1">
+				<stop offset="0" stop-color="#ffffff" stop-opacity="1" />
+				<stop offset="1" stop-color="#b9adff" stop-opacity="1" />
+			</linearGradient>
+		</defs>
+	</svg>
+	<div class="shadow">
+		<div class="tile">
+			<div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+			<div class="glass">
+				<div class="line l1"></div><div class="line l2"></div><div class="line l3"></div>
+				<div class="chip"></div>
+			</div>
+			<div class="sel"></div>
+			<div class="h" style="left:120px; top:160px"></div>
+			<div class="h" style="left:588px; top:160px"></div>
+			<div class="h" style="left:120px; top:578px"></div>
+			<div class="h" style="left:588px; top:578px"></div>
+			<svg class="cursor" viewBox="0 0 230 290">
+				<path d="M24 18 C24 8 34 3 43 9 L205 128 C215 135 211 150 199 151 L130 158 L170 228 C175 237 171 247 162 251 L141 260 C132 264 122 260 118 251 L80 180 L38 225 C30 233 18 228 18 217 Z"
+					fill="url(#cur)" stroke="url(#curEdge)" stroke-width="5" stroke-linejoin="round" />
+				<path d="M34 30 L190 138" stroke="rgba(255,255,255,.9)" stroke-width="5" stroke-linecap="round" opacity=".6" />
+			</svg>
+			<!-- Glass rim of the whole tile. -->
+			<div style="position:absolute; inset:0; border-radius:185px; box-shadow: inset 0 3px 0 rgba(255,255,255,.55), inset 0 -4px 10px rgba(20,0,80,.35), inset 0 0 0 2px rgba(255,255,255,.25);"></div>
+			<div style="position:absolute; inset:0; background: radial-gradient(70% 45% at 50% 0%, rgba(255,255,255,.2), transparent 100%);"></div>
+		</div>
+	</div>
+	<script>
+		if (location.hash === '#preview') document.body.classList.add('preview');
+		// Superellipse (n≈5) like Apple's continuous-corner icon shape, in objectBoundingBox units.
+		const n = 5, pts = [];
+		for (let i = 0; i <= 360; i++) {
+			const t = (i / 360) * 2 * Math.PI, c = Math.cos(t), s = Math.sin(t);
+			pts.push([0.5 + 0.5 * Math.sign(c) * Math.abs(c) ** (2 / n), 0.5 + 0.5 * Math.sign(s) * Math.abs(s) ** (2 / n)]);
+		}
+		document.getElementById('sq').setAttribute('d', 'M' + pts.map((p) => p.map((v) => v.toFixed(5)).join(' ')).join('L') + 'Z');
+	</script>
+</body>
+</html>
