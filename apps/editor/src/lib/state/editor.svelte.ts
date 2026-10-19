@@ -677,6 +677,7 @@ class EditorState {
 	}
 
 	goTo(path: string) {
+		if (this.inPlace) this.exitInPlace(); // another page: back to editing the page
 		this.currentPath = path;
 		this.selection = EMPTY_SELECTION;
 		this.mirrors = {};
