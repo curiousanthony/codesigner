@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -84,7 +84,14 @@ export function listSourceBranches(repoRoot: string): SourceBranch[] {
 export function listBranches(repoRoot: string): DesignBranch[] {
 	const out = tryGit(repoRoot, ['worktree', 'list', '--porcelain']);
 	if (out === null) return [];
-	const mainRoot = resolve(repoRoot);
+	const real = (path: string) => {
+		try {
+			return realpathSync(path);
+		} catch {
+			return resolve(path);
+		}
+	};
+	const mainRoot = real(repoRoot);
 	const branches: DesignBranch[] = [];
 	for (const block of out.split('\n\n')) {
 		const lines = block.split('\n');
@@ -93,7 +100,7 @@ export function listBranches(repoRoot: string): DesignBranch[] {
 		const head = lines.find((l) => l.startsWith('HEAD '))?.slice(5) ?? null;
 		const ref = lines.find((l) => l.startsWith('branch '))?.slice(7) ?? null;
 		const name = ref?.replace(/^refs\/heads\//, '') ?? '(detached)';
-		const isMainCheckout = resolve(worktree) === mainRoot;
+		const isMainCheckout = real(worktree) === mainRoot;
 		// Other tools' worktrees (editors, agents) aren't ours to show, and checking each one is slow.
 		if (!isMainCheckout && !name.startsWith(DESIGN_PREFIX)) continue;
 		const base = isMainCheckout ? null : tryGit(repoRoot, ['config', `branch.${name}.codesigner-base`]);

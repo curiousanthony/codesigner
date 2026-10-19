@@ -42,3 +42,47 @@ export function ensureImport(doc: SvelteDoc, s: MagicString, spec: ImportSpec) {
 		s.appendLeft(script.content.start, `\n${unit}${statement(spec)}`);
 	}
 }
+
+/**
+ * The name markup should use for `spec` in this file: the existing binding when
+ * the same module is already imported, else `spec.local`, or `spec.local2`…
+ * when that name is taken by something else (another `Button`, a variable).
+ */
+export function resolveImport(doc: SvelteDoc, spec: ImportSpec): ImportSpec & { present: boolean } {
+	const script = (doc.ast as unknown as { instance?: { content: { body: Node[] } } | null }).instance;
+	const body = script?.content.body ?? [];
+	const imports = body.filter((n): n is ImportNode => n.type === 'ImportDeclaration');
+	const wanted = spec.imported ?? spec.local;
+	for (const i of imports) {
+		if (i.source.value !== spec.from) continue;
+		for (const sp of i.specifiers) {
+			const sameKind =
+				(spec.kind === 'namespace' && sp.type === 'ImportNamespaceSpecifier') ||
+				(spec.kind === 'default' && sp.type === 'ImportDefaultSpecifier') ||
+				(spec.kind === 'named' && sp.type === 'ImportSpecifier' && sp.imported?.name === wanted);
+			if (sameKind) return { ...spec, local: sp.local.name, present: true };
+		}
+	}
+	const taken = new Set<string>();
+	for (const node of body) {
+		if (node.type === 'ImportDeclaration') (node as ImportNode).specifiers.forEach((sp) => taken.add(sp.local.name));
+		else if (node.type === 'VariableDeclaration') for (const d of (node as unknown as { declarations: { id: Node }[] }).declarations) collect(d.id, taken);
+		else if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') {
+			const id = (node as unknown as { id?: { name: string } }).id;
+			if (id) taken.add(id.name);
+		}
+	}
+	let local = spec.local;
+	for (let n = 2; taken.has(local); n++) local = `${spec.local}${n}`;
+	return { ...spec, local, imported: spec.kind === 'named' ? wanted : undefined, present: false };
+}
+
+type Node = { type: string; [key: string]: unknown };
+function collect(pattern: Node | null | undefined, out: Set<string>) {
+	if (!pattern) return;
+	if (pattern.type === 'Identifier') out.add(pattern.name as string);
+	else if (pattern.type === 'ObjectPattern') for (const p of pattern.properties as Node[]) collect((p.type === 'RestElement' ? p.argument : p.value) as Node, out);
+	else if (pattern.type === 'ArrayPattern') for (const e of pattern.elements as Node[]) collect(e, out);
+	else if (pattern.type === 'AssignmentPattern') collect(pattern.left as Node, out);
+	else if (pattern.type === 'RestElement') collect(pattern.argument as Node, out);
+}

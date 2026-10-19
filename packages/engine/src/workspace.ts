@@ -20,8 +20,8 @@ import type {
 } from '@codesigner/protocol';
 import { locKey } from '@codesigner/protocol';
 import { SvelteDoc, type ElementLike, type Located } from './svelte/doc.js';
-import { ensureImport } from './svelte/imports.js';
-import { extractComponent } from './svelte/extract.js';
+import { ensureImport, resolveImport } from './svelte/imports.js';
+import { extractComponent, removeUnusedImports } from './svelte/extract.js';
 import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
 import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
@@ -164,6 +164,18 @@ export class Workspace {
 		return targets[0].file;
 	}
 
+	/** Imports an insert needs, renamed when the name is taken in this file (the markup's tags follow). */
+	private withResolvedImports(doc: SvelteDoc, op: Extract<EditOp, { type: 'insert' }>): Extract<EditOp, { type: 'insert' }> {
+		let markup = op.markup;
+		const imports: ImportSpec[] = [];
+		for (const spec of op.imports ?? []) {
+			const resolved = resolveImport(doc, spec);
+			if (resolved.local !== spec.local) markup = markup.replace(new RegExp(`(</?)${spec.local}(?=[\\s/>.])`, 'g'), `$1${resolved.local}`);
+			if (!resolved.present) imports.push({ kind: resolved.kind, local: resolved.local, from: resolved.from, ...(resolved.imported ? { imported: resolved.imported } : {}) });
+		}
+		return { ...op, markup, imports };
+	}
+
 	/** Index among `parent`'s children for an insert/move next to `anchor` (its enclosing child: it may sit in an {#if}/{#each}). */
 	private anchorIndex(doc: SvelteDoc, parent: ElementLike | null, index: number, anchor: { target: SourceLoc; position: 'before' | 'after' } | undefined, skip?: ElementLike): number {
 		if (!anchor) return index;
@@ -243,11 +255,12 @@ export class Workspace {
 		const created: SourceLoc[] = [];
 		const texts = new Map<string, { before: string; current: string; created?: boolean }>();
 		try {
-			for (const op of request.ops) {
+			for (let op of request.ops) {
 				const file = this.fileOf(op);
 				if (!file.endsWith('.svelte')) throw new EditError(`Only .svelte files can be edited visually (${file})`);
 				const entry = texts.get(file) ?? { before: this.read(file), current: this.read(file) };
 				const previous = entry.current;
+				if (op.type === 'insert' && op.imports?.length) op = this.withResolvedImports(new SvelteDoc(previous), op);
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
 				if (op.type === 'insert') {
 					// Imports go in after locating the markup (the script usually sits above it, shifting lines).
@@ -264,8 +277,11 @@ export class Workspace {
 					s.overwrite(target.start, target.end, extraction.usage);
 					const at = doc.lineColumnOf(target.start);
 					const withImport = addImports(s.toString(), [{ kind: 'default', local: op.name, from: op.importPath }], { file, ...at });
-					entry.current = withImport.text;
-					created.push(withImport.loc);
+					// Imports that went with the markup and aren't used here any more (lines above the usage may shift).
+					const cleaned = removeUnusedImports(new SvelteDoc(withImport.text), extraction.moved);
+					const shift = cleaned.split('\n').length - withImport.text.split('\n').length;
+					entry.current = cleaned;
+					created.push({ ...withImport.loc, line: withImport.loc.line + shift });
 					texts.set(op.file, { before: '', current: extraction.component, created: true });
 				}
 				if (op.type === 'move') created.push(insertedAt(file, previous, entry.current, previous.split('\n')[op.target.line - 1].slice(op.target.column)));

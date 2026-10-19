@@ -95,6 +95,7 @@
 	"component_editing": "Editing {name}: changes apply to every instance.",
 	"component_editing_variant": "Editing {variant} · {state}",
 	"component_from_spread": "Set through a spread attribute; edit it in code",
+	"component_name_taken": "{name} is already a component in this project.",
 	"component_new_variant": "New {axis} name",
 	"component_state_default": "Default state",
 	"component_title": "Component",

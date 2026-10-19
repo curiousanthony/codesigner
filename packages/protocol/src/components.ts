@@ -15,6 +15,8 @@ export interface ComponentInfo {
 	variants: VariantGroup[];
 	/** Index modules exporting this component under other names (e.g. Card.Root). */
 	exportedAs: string[];
+	/** Takes `class` (or spreads its other props), so styling an instance reaches its root. */
+	acceptsClass?: boolean;
 }
 
 export interface ComponentProp {

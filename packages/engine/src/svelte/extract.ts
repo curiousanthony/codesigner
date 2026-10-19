@@ -146,6 +146,44 @@ export interface Extraction {
 	/** Usage written in place of the markup, e.g. `<ProjectCard {project} />`. */
 	usage: string;
 	props: string[];
+	/** Import bindings copied into the component (the page may no longer need them). */
+	moved: string[];
+}
+
+/** Drops imports of `names` that nothing in the file references any more (after moving markup out). */
+export function removeUnusedImports(doc: SvelteDoc, names: string[]): string {
+	const ast = doc.ast as unknown as { instance?: { content: { body: Node[] } }; fragment: Node };
+	const body = ast.instance?.content.body ?? [];
+	const used = new Set<string>();
+	const template = scan(ast.fragment);
+	for (const n of [...template.refs, ...template.components]) used.add(n.startsWith('$') ? n.slice(1) : n);
+	for (const node of body) {
+		if (node.type === 'ImportDeclaration') continue;
+		for (const n of scan(node).refs) used.add(n.startsWith('$') ? n.slice(1) : n);
+	}
+	let text = doc.source;
+	const edits: { start: number; end: number; text: string }[] = [];
+	for (const node of body) {
+		if (node.type !== 'ImportDeclaration') continue;
+		const specs = node.specifiers as Node[];
+		const drop = specs.filter((sp) => names.includes((sp.local as Node).name as string) && !used.has((sp.local as Node).name as string));
+		if (!drop.length) continue;
+		if (drop.length === specs.length) {
+			// The whole line, with its indentation and line break.
+			let start = node.start!;
+			while (start > 0 && /[ \t]/.test(text[start - 1])) start--;
+			const end = text[node.end!] === '\n' ? node.end! + 1 : node.end!;
+			edits.push({ start, end, text: '' });
+		} else {
+			const keep = specs.filter((sp) => !drop.includes(sp)).map((sp) => text.slice(sp.start, sp.end));
+			const named = keep.filter((k, i) => specs.filter((sp) => !drop.includes(sp))[i].type === 'ImportSpecifier');
+			const others = keep.filter((k, i) => specs.filter((sp) => !drop.includes(sp))[i].type !== 'ImportSpecifier');
+			const clause = [...others, ...(named.length ? [`{ ${named.join(', ')} }`] : [])].join(', ');
+			edits.push({ start: node.start!, end: node.end!, text: `import ${clause} from ${text.slice((node.source as Node).start, (node.source as Node).end)};` });
+		}
+	}
+	for (const e of edits.sort((a, b) => b.start - a.start)) text = text.slice(0, e.start) + e.text + text.slice(e.end);
+	return text;
 }
 
 /**
@@ -163,6 +201,10 @@ export function extractComponent(doc: SvelteDoc, target: ElementLike, name: stri
 
 	const imports = new Map([...module.imports, ...instance.imports]);
 	const pageNames = new Set([...instance.names, ...module.names, ...outer]);
+	// `<Card />` on a page that already has `import * as Card` would silently render the other one.
+	if (imports.has(name) || pageNames.has(name)) {
+		throw new EditError(`"${name}" is already used in this page. Pick another name.`);
+	}
 	const used = new Set([...refs, ...components].map((n) => (n.startsWith('$') && !pageNames.has(n) ? n.slice(1) : n)));
 	const props: string[] = [];
 	const copied = new Set<string>();
@@ -187,5 +229,5 @@ export function extractComponent(doc: SvelteDoc, target: ElementLike, name: stri
 	const scriptLines = [...[...copied].map((text) => unit + text), ...(props.length ? [`${unit}let { ${props.join(', ')} } = $props();`] : [])];
 	const component = scriptLines.length ? `<script${lang}>\n${scriptLines.join('\n')}\n</script>\n\n${body}\n` : `${body}\n`;
 	const usage = `<${name}${props.map((p) => ` {${p}}`).join('')} />`;
-	return { component, usage, props };
+	return { component, usage, props, moved: [...used].filter((n) => imports.has(n) && !declared.has(n)) };
 }

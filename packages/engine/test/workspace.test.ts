@@ -165,6 +165,12 @@ describe('structure', () => {
 		result = await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: parent(), index: -1, markup: '<Card.Root>Card</Card.Root>', imports: [{ kind: 'namespace', local: 'Card', from: '$lib/components/ui/card' }] }] });
 		expect(text()).toContain("import * as Card from '$lib/components/ui/card';");
 		expect(result.created).toEqual([locOf(text(), '<Card.Root>', page)]);
+		// A different Button is already imported: the new one is aliased and the tag follows.
+		writeFileSync(join(project.dir, page), "<script lang=\"ts\">\n\timport Button from '$lib/components/app/Button.svelte';\n</script>\n\n<div class=\"flex\">\n\t<Button />\n</div>\n");
+		result = await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: parent(), index: -1, markup: '<Button>Button</Button>', imports: [{ kind: 'named', local: 'Button', from: '$lib/components/ui/button' }] }] });
+		expect(text()).toContain("import { Button as Button2 } from '$lib/components/ui/button';");
+		expect(text()).toContain('<Button2>Button</Button2>');
+		expect(result.created).toEqual([locOf(text(), '<Button2>', page)]);
 		// No script at all: one is created.
 		const bare = 'src/routes/test/bare.svelte';
 		writeFileSync(join(project.dir, bare), '<main class="p-4"></main>\n');
@@ -201,6 +207,13 @@ describe('structure', () => {
 				''
 			].join('\n')
 		);
+		// A name the page already uses (the shadcn namespace) is refused instead of shadowed.
+		const clash = await ws.apply({
+			label: 'Create component',
+			ops: [{ type: 'extract-component', target: locOf(text(), '<Card.Root', page), name: 'Card', file: 'src/lib/components/Card.svelte', importPath: '$lib/components/Card.svelte' }]
+		});
+		expect(clash.ok).toBe(false);
+		expect(clash.error).toContain('already used');
 		const result = await ws.apply({
 			label: 'Create component',
 			ops: [{ type: 'extract-component', target: locOf(text(), '<Card.Root', page), name: 'ProjectCard', file: 'src/lib/components/ProjectCard.svelte', importPath: '$lib/components/ProjectCard.svelte' }]
@@ -223,6 +236,8 @@ describe('structure', () => {
 			].join('\n')
 		);
 		expect(text()).toContain('\t\t<ProjectCard {project} {title} />\n');
+		expect(text()).not.toContain("import * as Card"); // moved with the markup, unused here now
+		expect(text()).toContain("import { projects } from '$lib/projects';"); // still used by the {#each}
 		expect(text()).toContain("import ProjectCard from '$lib/components/ProjectCard.svelte';");
 		expect(result.created).toEqual([locOf(text(), '<ProjectCard', page)]);
 		// Two-way state stays in the page.

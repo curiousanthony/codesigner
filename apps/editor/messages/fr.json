@@ -95,6 +95,7 @@
 	"component_editing": "Modification de {name} : les changements s'appliquent à toutes les instances.",
 	"component_editing_variant": "Modification de {variant} · {state}",
 	"component_from_spread": "Défini par un attribut spread ; modifiez-le dans le code",
+	"component_name_taken": "{name} est déjà un composant de ce projet.",
 	"component_new_variant": "Nom du nouveau {axis}",
 	"component_state_default": "État par défaut",
 	"component_title": "Composant",

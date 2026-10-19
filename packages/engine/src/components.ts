@@ -102,6 +102,21 @@ function controlFor(type: string | null, name: string, defaultValue: string | nu
 }
 
 /** Reads `let { a = 1, b }: Props = $props()` and the matching Props type members. */
+/** A component styles its root from the outside when it takes `class` or spreads the rest of its props. */
+export function acceptsClass(doc: SvelteDoc, props: ComponentProp[]): boolean {
+	if (props.some((p) => p.name === 'class')) return true;
+	let rest = false;
+	if (doc.ast.instance) {
+		walkJs(doc.ast.instance.content, (node) => {
+			const init = node.init as Node | undefined;
+			if (node.type === 'VariableDeclarator' && init?.type === 'CallExpression' && (init.callee as Node).name === '$props') {
+				rest ||= (((node.id as Node).properties as Node[]) ?? []).some((p) => p.type === 'RestElement');
+			}
+		});
+	}
+	return rest;
+}
+
 export function extractProps(doc: SvelteDoc): ComponentProp[] {
 	const script = doc.ast.instance;
 	if (!script) return [];
@@ -188,10 +203,12 @@ export function scanComponents(root: string, libDir = 'src/lib', libAlias = '$li
 		const group = parts.length > 2 ? parts[parts.length - 3] : parts.length > 1 ? parts[0] : '';
 		let props: ComponentProp[] = [];
 		let variants: VariantGroup[] = [];
+		let styled = false;
 		try {
 			const doc = new SvelteDoc(readFileSync(file, 'utf8'));
 			props = extractProps(doc);
 			variants = extractVariants(doc);
+			styled = acceptsClass(doc, props);
 		} catch {
 			// unparsable file: still list it
 		}
@@ -210,7 +227,8 @@ export function scanComponents(root: string, libDir = 'src/lib', libAlias = '$li
 			group: group || 'components',
 			props,
 			variants,
-			exportedAs
+			exportedAs,
+			acceptsClass: styled
 		});
 	}
 	return out.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));

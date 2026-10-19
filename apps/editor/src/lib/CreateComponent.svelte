@@ -8,9 +8,17 @@
 	const suggest = (layer: string) =>
 		layer.split('.')[0].replace(/[^a-zA-Z0-9]+(.)?/g, (_, c: string | undefined) => (c ?? '').toUpperCase()).replace(/^./, (c) => c.toUpperCase()).replace(/^[^A-Z]+/, '') || 'MyComponent';
 
-	let name = $state(suggest(editor.selected?.name ?? ''));
+	/** Names of the project's components (`Card`, `Button`…): a new one shouldn't reuse them. */
+	const taken = $derived(new Set(editor.components.flatMap((c) => [c.name, ...c.exportedAs].map((n) => n.split('.')[0]))));
+	const initial = () => {
+		const base = suggest(editor.selected?.name ?? '');
+		const names = new Set(editor.components.flatMap((c) => [c.name, ...c.exportedAs].map((n) => n.split('.')[0])));
+		return names.has(base) ? `New${base}` : base;
+	};
+	let name = $state(initial());
 	let busy = $state(false);
-	const valid = $derived(/^[A-Z][A-Za-z0-9]*$/.test(name.trim()) && !editor.components.some((c) => c.file === `src/lib/components/${name.trim()}.svelte`));
+	const clash = $derived(taken.has(name.trim()));
+	const valid = $derived(/^[A-Z][A-Za-z0-9]*$/.test(name.trim()) && !clash && !editor.components.some((c) => c.file === `src/lib/components/${name.trim()}.svelte`));
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -38,6 +46,7 @@
 			onkeydown={(e) => e.key === 'Escape' && (editor.createComponentOpen = false)}
 		/>
 		<p class="truncate font-mono text-[10.5px] text-muted">src/lib/components/{name.trim() || '…'}.svelte</p>
+		{#if clash}<p class="text-[11px] text-warning">{m.component_name_taken({ name: name.trim() })}</p>{/if}
 		<div class="flex justify-end gap-1.5">
 			<button type="button" class="h-[30px] rounded-control px-2.5 text-label hover:bg-control" onclick={() => (editor.createComponentOpen = false)}>{m.action_cancel()}</button>
 			<button type="submit" class="h-[30px] rounded-control bg-component px-3 font-medium text-white disabled:opacity-50" disabled={!valid || busy}>{m.component_create_submit()}</button>

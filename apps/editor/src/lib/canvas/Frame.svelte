@@ -381,6 +381,12 @@
 		const info = editor.selected;
 		if (!designMode || dragging || !editor.styleCommands || editor.selection.frameId !== frameId || editor.selection.ids.length !== 1) return null;
 		if (!info?.editable || !info.loc || isComponentCanvas) return null;
+		// A component that doesn't take `class` would ignore the edit: style it inside ("Edit component").
+		if (info.kind === 'instance') {
+			const tag = info.componentTag ?? '';
+			const component = editor.components.find((c) => c.exportedAs.includes(tag) || c.name === tag || c.file === info.definitionFile);
+			if (!component?.acceptsClass) return null;
+		}
 		const rect = selectedRects[info.id];
 		if (!rect || rect.width * scale < 60 || rect.height * scale < 36) return null;
 		const c = info.computed;
