@@ -1115,7 +1115,8 @@ class EditorState {
 		await this.select(frameId!, ids, undefined, nextOccurrence);
 	}
 
-	private async refreshTreeNow(frameId: string) {
+	/** Asks a frame for its layer tree and waits for it (at most 800ms). */
+	async refreshTreeNow(frameId: string) {
 		const frame = this.frames.get(frameId);
 		if (!frame) return;
 		await new Promise<void>((resolve) => {
@@ -1133,7 +1134,12 @@ class EditorState {
 		});
 	}
 
+	/** Hot reloads seen, and the count when the last edit was sent (a reload can land before the edit's caller listens). */
+	hmrCount = 0;
+	hmrAtLastEdit = 0;
+
 	onHmr() {
+		this.hmrCount++;
 		this.pendingHmr.clear();
 		const waiters = this.hmrWaiters;
 		this.hmrWaiters = [];
@@ -1167,6 +1173,7 @@ class EditorState {
 			if (!this.worktree || ops.length === 0) return null;
 			await this.waitForHmr();
 			const request: EditRequest = { label, ops, coalesce: options.coalesce };
+			this.hmrAtLastEdit = this.hmrCount;
 			try {
 				const result = await invoke('source:edit', this.worktree, request);
 				if (!result.ok) {

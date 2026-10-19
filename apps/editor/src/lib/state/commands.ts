@@ -1,4 +1,4 @@
-import type { ComponentInfo, DropTarget, ImageAsset, ImportSpec, SourceLoc } from '@codesigner/protocol';
+import type { ComponentInfo, DropTarget, ImageAsset, ImportSpec, LayerNode, SourceLoc } from '@codesigner/protocol';
 import { editor, type DrawTool } from './editor.svelte.js';
 import { spacing } from '#lib/style/tailwind-map.js';
 import { invoke } from '#lib/api.js';
@@ -92,15 +92,60 @@ export async function drawLayer(kind: DrawTool, frameId: string, target: DropTar
  * Drag to reorder (canvas or Layers panel): moves a layer next to the target's
  * anchor, or to the end of an empty/target container. Defaults to the selection.
  */
-export async function moveLayer(frameId: string, target: Pick<DropTarget, 'parent' | 'anchor'>, source?: SourceLoc) {
+/** Moves a layer; `then` runs once the moved layer is selected again (returns false when nothing moved). */
+export async function moveLayer(frameId: string, target: Pick<DropTarget, 'parent' | 'anchor'>, source?: SourceLoc, then?: () => void): Promise<boolean> {
 	const info = editor.selected;
 	const from = source ?? (info?.loc && info.editable ? { ...info.loc, tag: info.componentTag ?? info.tag } : null);
-	if (!from) return;
+	if (!from) return false;
 	const result = await editor.editWithResult(m.edit_move(), [
 		{ type: 'move', target: from, parent: target.parent, index: -1, anchor: target.anchor ?? undefined }
 	]);
 	const loc = result?.changes.length ? result.created?.[0] : null;
-	if (loc) pendingSelect({ ...loc, tag: from.tag }, frameId);
+	if (loc) pendingSelect({ ...loc, tag: from.tag }, frameId, () => then?.());
+	return !!loc;
+}
+
+/**
+ * Framer: arrow keys move the selected layer before / after its neighbour in
+ * its stack. Neighbours rendered by the same `{#each}` share one source
+ * location, so siblings are counted once per location.
+ */
+let reordering = false;
+export async function reorderSelection(step: -1 | 1) {
+	// Until the moved layer is selected again, the selection's source location points at its old line.
+	if (reordering) return;
+	const { frameId, ids } = editor.selection;
+	const frame = frameId ? editor.frames.get(frameId) : null;
+	if (!frameId || !frame || ids.length !== 1) return;
+	reordering = true;
+	const done = () => (reordering = false);
+	setTimeout(done, 4500); // the moved layer may never show up again (e.g. an error page)
+	try {
+		// Read the layer and its siblings from the page as it is now, not from cached selection info.
+		await editor.refreshTreeNow(frameId);
+		const [info] = await frame.describe([ids[0]]);
+		if (!info?.loc || !info.editable) return done();
+		const parentId = editor.pathOf(ids[0], frameId).at(-2);
+		const parent = parentId ? editor.findNode(parentId, frameId) : null;
+		const file = info.loc.file;
+		if (!parent?.loc || parent.loc.file !== file) return done();
+		const key = (loc: SourceLoc) => `${loc.line}:${loc.column}`;
+		const seen = new Set<string>();
+		const siblings = parent.children.filter((c) => c.loc?.file === file && !seen.has(key(c.loc)) && seen.add(key(c.loc)));
+		const index = siblings.findIndex((c) => key(c.loc!) === key(info.loc!));
+		const neighbor = siblings[index + step];
+		if (index < 0 || !neighbor?.loc) return done();
+		const tagOf = (node: LayerNode) => (node.isInstance ? node.name : node.tag);
+		const moved = await moveLayer(
+			frameId,
+			{ parent: { ...parent.loc, tag: tagOf(parent) }, anchor: { target: { ...neighbor.loc, tag: tagOf(neighbor) }, position: step < 0 ? 'before' : 'after' } },
+			{ ...info.loc, tag: info.componentTag ?? info.tag },
+			done
+		);
+		if (!moved) done();
+	} catch {
+		done();
+	}
 }
 
 /** Static classes written on a layer (what copy/paste style carries). */
@@ -230,18 +275,26 @@ function pendingSelect(loc: SourceLoc, inFrame?: string, then?: (id: string) => 
 	if (!frameId) return;
 	const frame = editor.frames.get(frameId);
 	if (!frame) return;
-	const off = frame.subscribe(async (message) => {
+	const select = async () => {
+		// Right after the reload the new DOM may not be mounted yet: look until the layer shows up.
+		let ids: string[] = [];
+		for (let attempt = 0; attempt < 15 && !ids.length; attempt++) {
+			await new Promise((r) => setTimeout(r, attempt ? 100 : 60));
+			ids = await frame.findLoc(loc);
+		}
+		if (!ids.length) return;
+		await editor.refreshTree();
+		setTimeout(async () => {
+			await editor.select(frameId, [ids[0]]);
+			then?.(ids[0]);
+		}, 120);
+	};
+	// The page may already have hot-reloaded while the edit's result travelled back.
+	if (editor.hmrCount > editor.hmrAtLastEdit) return void select();
+	const off = frame.subscribe((message) => {
 		if (message.type !== 'dom-changed' || message.reason !== 'hmr') return;
 		off();
-		await new Promise((r) => setTimeout(r, 60));
-		const ids = await frame.findLoc(loc);
-		if (ids.length) {
-			await editor.refreshTree();
-			setTimeout(async () => {
-				await editor.select(frameId, [ids[0]]);
-				then?.(ids[0]);
-			}, 120);
-		}
+		void select();
 	});
 	setTimeout(off, 4000);
 }

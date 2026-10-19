@@ -447,11 +447,20 @@ export function bridgeMain(config: BridgeConfig) {
 		return ids;
 	};
 
+	/**
+	 * Layers rendered from a source location. With a tag, only layers of that tag
+	 * (component name for instances): mid hot-reload the old DOM still has another
+	 * element on that line.
+	 */
 	const findLoc = (loc: SourceLoc): NodeId[] => {
 		rebuild();
 		const key = locKey(loc);
 		const out: NodeId[] = [];
-		for (const rec of recs.values()) if (locKey(rec.layer.loc) === key) out.push(rec.id);
+		for (const rec of recs.values()) {
+			if (locKey(rec.layer.loc) !== key) continue;
+			const tag = rec.layer.kind === 'instance' ? rec.layer.tag : rec.els[0]?.localName;
+			if (!loc.tag || tag === loc.tag) out.push(rec.id);
+		}
 		return out;
 	};
 

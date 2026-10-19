@@ -150,6 +150,17 @@ describe('structure', () => {
 		expect(result.created).toEqual([loc('<p>B')]);
 	});
 
+	test('reports where a layer moved before a sibling with another tag (arrow-key reorder)', async () => {
+		const page = 'src/routes/test/reorder-tags.svelte';
+		const { writeFileSync } = await import('node:fs');
+		writeFileSync(join(project.dir, page), '<div>\n\t<p class="sub">Sub</p>\n\t<h1 class="title">Title</h1>\n</div>\n');
+		const text = () => readFileSync(join(project.dir, page), 'utf8');
+		const loc = (needle: string) => locOf(text(), needle, page);
+		const result = await ws.apply({ label: 'move', ops: [{ type: 'move', target: loc('<h1'), parent: loc('<div'), index: -1, anchor: { target: loc('<p'), position: 'before' } }] });
+		expect(text()).toBe('<div>\n\t<h1 class="title">Title</h1>\n\t<p class="sub">Sub</p>\n</div>\n');
+		expect(result.created).toEqual([loc('<h1')]);
+	});
+
 	test('inserts a component with its import (dropped from Assets)', async () => {
 		const page = 'src/routes/test/assets.svelte';
 		const { writeFileSync } = await import('node:fs');

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { editor, isDrawTool, type DrawTool, type LeftTab } from '#lib/state/editor.svelte.js';
-	import { copyStyle, deleteSelection, duplicateSelection, pasteStyle, unwrapSelection, wrapSelection } from '#lib/state/commands.js';
+	import { copyStyle, deleteSelection, duplicateSelection, pasteStyle, reorderSelection, unwrapSelection, wrapSelection } from '#lib/state/commands.js';
 	import { invoke } from '#lib/api.js';
 	import { on } from '#lib/api.js';
 	import Welcome from '#lib/Welcome.svelte';
@@ -158,6 +158,14 @@
 			case 'Backspace':
 			case 'Delete':
 				void deleteSelection();
+				break;
+			case 'ArrowUp':
+			case 'ArrowLeft':
+			case 'ArrowDown':
+			case 'ArrowRight':
+				// Arrow keys reorder the selection in its stack, like Framer.
+				if (!editor.selection.ids.length) return;
+				void reorderSelection(event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1);
 				break;
 			case 'e':
 				editor.rightTab = 'style';

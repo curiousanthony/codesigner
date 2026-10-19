@@ -492,7 +492,11 @@ function insertedAt(file: string, before: string, after: string, markup: string)
 	while (prefix < before.length && before.charCodeAt(prefix) === after.charCodeAt(prefix)) prefix++;
 	const added = after.length - before.length;
 	const first = markup.split('\n')[0];
-	let start = after.indexOf(first, Math.max(0, prefix - Math.abs(added)));
+	let from = Math.max(0, prefix - Math.abs(added));
+	// The common prefix can run into the new markup's tag (`<p…` replaced by `<h1…` shares the `<`): start at that tag.
+	const lt = after.lastIndexOf('<', from);
+	if (lt >= 0 && !after.slice(lt, from).includes('>')) from = lt;
+	let start = after.indexOf(first, from);
 	if (start < 0) start = after.indexOf('<', prefix);
 	const lines = after.slice(0, start).split('\n');
 	return { file, line: lines.length, column: lines[lines.length - 1].length };
