@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { editor, isDrawTool, type DrawTool, type LeftTab } from '#lib/state/editor.svelte.js';
-	import { deleteSelection, duplicateSelection, unwrapSelection, wrapSelection } from '#lib/state/commands.js';
+	import { copyStyle, deleteSelection, duplicateSelection, pasteStyle, unwrapSelection, wrapSelection } from '#lib/state/commands.js';
+	import { invoke } from '#lib/api.js';
 	import { on } from '#lib/api.js';
 	import Welcome from '#lib/Welcome.svelte';
 	import TopBar from '#lib/TopBar.svelte';
@@ -47,6 +48,20 @@
 				break;
 			case 'toggle-code':
 				editor.codeOpen = !editor.codeOpen;
+				break;
+			case 'copy-style':
+				if (isTyping()) document.execCommand('copy');
+				else void copyStyle();
+				break;
+			case 'paste-style':
+				if (isTyping()) document.execCommand('paste');
+				else void pasteStyle();
+				break;
+			case 'new-branch':
+				editor.newBranchRequest++;
+				break;
+			case 'open-in-editor':
+				if (editor.worktree) void invoke('project:open-in-editor', editor.worktree);
 				break;
 			case 'open-project':
 				void editor.pickAndOpen();

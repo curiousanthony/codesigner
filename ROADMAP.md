@@ -52,7 +52,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ⬜ Insert: Image; shadcn components from Assets
 - ✅ Text editing on canvas: double-click a selected text layer (or draw one with `T`), type, `↩` commits, `Esc` cancels
 - ⬜ Rich text (inline `<strong>`/links), typography presets
-- ⬜ Drag to reorder in stacks and in the layer tree; delete, duplicate (`⌘D`), copy/paste style
+- ✅ Drag to reorder on the canvas (ghost + insertion line) and in the Layers panel (before / after / inside); delete, duplicate (`⌘D`), copy/paste style (`⌥⌘C` / `⌥⌘V`)
 - ✅ Breakpoint-aware edits with Framer's cascade: an edit applies to that breakpoint and smaller ones, larger frames get pinned (`gap-6` edited on Phone → `gap-3 md:gap-6`); overridden properties highlighted
 - ✅ Per-breakpoint layer trees in the Layers panel (Desktop / Tablet / Phone rows), selection mirrored in every frame, layer click outlines on the canvas
 - ✅ Add / resize / remove breakpoints, make one primary (the frame pill's `+` and `…`)

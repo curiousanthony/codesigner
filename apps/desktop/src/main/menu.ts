@@ -51,7 +51,10 @@ export function buildMenu(send: (command: string) => void): Menu {
 				{ role: 'cut' },
 				{ role: 'copy' },
 				{ role: 'paste' },
-				{ role: 'selectAll' }
+				{ role: 'selectAll' },
+				{ type: 'separator' },
+				cmd('Copy Style', 'copy-style', 'CmdOrCtrl+Alt+C'),
+				cmd('Paste Style', 'paste-style', 'CmdOrCtrl+Alt+V')
 			]
 		},
 		{

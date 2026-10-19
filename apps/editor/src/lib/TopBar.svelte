@@ -41,6 +41,15 @@
 	$effect(() => {
 		if (menu !== 'branch') creating = false;
 	});
+	// Menu: File › New Design Branch… (⇧⌘B)
+	let seenRequest = editor.newBranchRequest;
+	$effect(() => {
+		if (editor.newBranchRequest === seenRequest) return;
+		seenRequest = editor.newBranchRequest;
+		if (!editor.project?.isGitRepo) return;
+		menu = 'branch';
+		void openCreate();
+	});
 	let shipMessage = $state('');
 
 	const isMac = $derived(editor.appInfo?.platform === 'darwin');

@@ -1,6 +1,7 @@
 import type { DropTarget, SourceLoc } from '@codesigner/protocol';
 import { editor, type DrawTool } from './editor.svelte.js';
 import { spacing } from '#lib/style/tailwind-map.js';
+import { invoke } from '#lib/api.js';
 import { m } from '#lib/paraglide/messages.js';
 
 /** Default markup for inserted layers (Framer's defaults, as Tailwind). */
@@ -91,6 +92,40 @@ export async function moveLayer(frameId: string, target: Pick<DropTarget, 'paren
 	]);
 	const loc = result?.changes.length ? result.created?.[0] : null;
 	if (loc) pendingSelect({ ...loc, tag: from.tag }, frameId);
+}
+
+/** Static classes written on a layer (what copy/paste style carries). */
+async function staticClasses(info: { loc: SourceLoc | null; tag: string; componentTag: string | null; className: string }): Promise<string[]> {
+	if (!info.loc || !editor.worktree) return [];
+	const source = await invoke('source:inspect', editor.worktree, { ...info.loc, tag: info.componentTag ?? info.tag }).catch(() => null);
+	return source?.staticClasses ?? [];
+}
+
+let copiedStyle: string[] | null = null;
+
+/** ⌥⌘C: remembers the selected layer's classes. */
+export async function copyStyle() {
+	const info = editor.selected;
+	if (!info?.loc || !info.editable) return void editor.toast(m.cmd_select_first());
+	copiedStyle = await staticClasses(info);
+	editor.toast(m.style_copied({ count: copiedStyle.length }));
+}
+
+/** ⌥⌘V: replaces the selected layers' classes with the copied ones. */
+export async function pasteStyle() {
+	if (!copiedStyle) return void editor.toast(m.style_nothing_copied());
+	if (!requireSelection()) return;
+	const add = copiedStyle;
+	const infos = editor.selection.infos.filter((i) => i.loc && i.editable);
+	const ops = await Promise.all(
+		infos.map(async (info) => ({
+			type: 'classes' as const,
+			target: { ...info.loc!, tag: info.componentTag ?? info.tag },
+			remove: (await staticClasses(info)).filter((c) => !add.includes(c)),
+			add
+		}))
+	);
+	await editor.edit(m.edit_paste_style(), ops);
 }
 
 export async function unwrapSelection() {

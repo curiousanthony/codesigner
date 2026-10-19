@@ -130,6 +130,9 @@ class EditorState {
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
 
+	/** Bumped by the menu's "New Design Branch…" to open that form in the branch menu. */
+	newBranchRequest = $state(0);
+
 	/** A text layer being edited in place on the canvas. */
 	textEditing = $state<{ frameId: string; id: NodeId; loc: SourceLoc } | null>(null);
 
