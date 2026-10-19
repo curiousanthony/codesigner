@@ -84,6 +84,15 @@ export class BridgeClient {
 		return reply?.path ?? [];
 	}
 
+	/** The frame's webContents id (for DevTools-protocol calls such as forcing :hover). */
+	webContentsId(): number | null {
+		try {
+			return (this.webview as unknown as { getWebContentsId(): number }).getWebContentsId();
+		} catch {
+			return null;
+		}
+	}
+
 	/** Gives the frame keyboard focus (for typing into a text layer edited in place). */
 	focus() {
 		this.webview.focus();

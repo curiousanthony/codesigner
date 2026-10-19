@@ -22,3 +22,34 @@ export function toHexLabel(color: string): string {
 	const hex = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 	return a < 1 ? `${hex} ${Math.round(a * 100)}%` : hex;
 }
+
+export type Hsva = { h: number; s: number; v: number; a: number };
+
+/** sRGB (0–255) → HSV (h 0–360, s/v 0–1). */
+export function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+	const [rn, gn, bn] = [r / 255, g / 255, b / 255];
+	const max = Math.max(rn, gn, bn);
+	const d = max - Math.min(rn, gn, bn);
+	let h = 0;
+	if (d) h = max === rn ? ((gn - bn) / d) % 6 : max === gn ? (bn - rn) / d + 2 : (rn - gn) / d + 4;
+	return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max };
+}
+
+export function hsvToRgb({ h, s, v }: { h: number; s: number; v: number }): [number, number, number] {
+	const f = (n: number) => {
+		const k = (n + h / 60) % 6;
+		return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))));
+	};
+	return [f(5), f(3), f(1)];
+}
+
+/** "#rrggbb", or "#rrggbbaa" when translucent. */
+export function toHex([r, g, b]: [number, number, number], a = 1): string {
+	const hex = (n: number) => n.toString(16).padStart(2, '0');
+	return `#${hex(r)}${hex(g)}${hex(b)}${a < 1 ? hex(Math.round(a * 255)) : ''}`;
+}
+
+export function parseHsva(color: string): Hsva {
+	const rgba = toRgba(color) ?? [0, 0, 0, 1];
+	return { ...rgbToHsv(rgba[0], rgba[1], rgba[2]), a: rgba[3] };
+}

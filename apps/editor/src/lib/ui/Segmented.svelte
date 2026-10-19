@@ -24,7 +24,7 @@
 			aria-label={option.label}
 			title={iconOnly ? option.label : undefined}
 			{disabled}
-			class="flex h-full min-w-0 flex-1 items-center justify-center rounded-[6px] px-1.5 transition-colors
+			class="flex h-full min-w-0 flex-1 items-center justify-center rounded-[6px] transition-colors {options.length > 3 ? 'px-0.5 text-[11px]' : 'px-1.5'}
 				{selected ? 'bg-control-active text-accent shadow-control' : 'text-label hover:text-fg'}"
 			onclick={() => onchange(option.value)}
 		>

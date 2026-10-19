@@ -57,9 +57,10 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Per-breakpoint layer trees in the Layers panel (Desktop / Tablet / Phone rows), selection mirrored in every frame, layer click outlines on the canvas
 - ✅ Add / resize / remove breakpoints, make one primary (the frame pill's `+` and `…`)
 - ✅ Code panel (⌘J): the file behind the selection with its tag highlighted, page and layout tabs; typing saves through the undo journal, invalid Svelte is refused, conflicts are detected
-- ⬜ Dark mode toggle in the dock; edits under dark write `dark:` variants
-- ⬜ States: hover/focus/active preview (CDP `forcePseudoState`) and editing (`hover:` …)
-- ⬜ Color picker with token swatches, opacity, hex/rgb/hsl/oklch
+- ✅ Dark preview in the dock; color edits under it write `dark:` variants (projects with a class-based dark mode)
+- ✅ States on page elements: Default / Hover / Pressed / Focus picker in the Style panel forces the state on the selection in every breakpoint (CDP) and edits write `hover:` / `active:` / `focus-visible:`
+- ✅ Color picker: token swatches with search and an opacity modifier (`bg-primary/80`), custom colors with saturation/brightness, hue and alpha (one write on release), hex input; opens upwards near the bottom
+- ⬜ Color picker: rgb/hsl/oklch input modes, eyedropper
 - ⬜ Scrub-to-change numeric inputs, arrow keys ±1 / shift ±10
 - ⬜ Smart guides, ⌥ distance measurement, padding/gap handles on canvas
 - ⬜ Interact mode (use the app normally) vs Design mode toggle

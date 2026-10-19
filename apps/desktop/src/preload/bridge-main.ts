@@ -698,6 +698,11 @@ export function bridgeMain(config: BridgeConfig) {
 			case 'end-edit-text':
 				finishEdit(msg.cancel);
 				break;
+			case 'force-state':
+				// Previously forced elements become "none" so the host can clear them too.
+				document.querySelectorAll('[data-codesigner-force]').forEach((el) => el.setAttribute('data-codesigner-force', 'none'));
+				if (msg.state !== 'none') for (const id of msg.ids) (recFor(id)?.els ?? []).forEach((el) => el.setAttribute('data-codesigner-force', msg.state));
+				break;
 			case 'set-text': {
 				const el = recFor(msg.id)?.els[0] ?? elFor(msg.id);
 				if (el) el.textContent = msg.text;

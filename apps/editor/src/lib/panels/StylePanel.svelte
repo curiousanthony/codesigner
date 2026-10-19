@@ -17,7 +17,7 @@
 		TriangleAlert,
 		Repeat
 	} from '@lucide/svelte';
-	import { editor } from '#lib/state/editor.svelte.js';
+	import { editor, type EditState } from '#lib/state/editor.svelte.js';
 	import { invoke } from '#lib/api.js';
 	import Section from '#lib/ui/Section.svelte';
 	import Row from '#lib/ui/Row.svelte';
@@ -25,7 +25,7 @@
 	import SelectField from '#lib/ui/SelectField.svelte';
 	import Segmented from '#lib/ui/Segmented.svelte';
 	import TextField from '#lib/ui/TextField.svelte';
-	import ColorField, { type ColorOption } from '#lib/ui/ColorField.svelte';
+	import ColorField, { type ColorChoice, type ColorOption } from '#lib/ui/ColorField.svelte';
 	import {
 		activePrefix,
 		alignValue,
@@ -91,7 +91,15 @@
 	/** On the component canvas, a cell's root edits its variant (and state) in the tv() config. */
 	const variantContext = $derived(editor.editingComponent && info?.context ? info.context : null);
 	const statePrefix = $derived(variantContext?.state ? (STATE_PREFIX[variantContext.state as keyof typeof STATE_PREFIX] ?? '') : '');
-	const prefixFor = (family: Family) => (variantContext ? statePrefix : activePrefix(cls, family, frameWidth));
+	/** Families that follow the theme: under dark preview they're edited as `dark:` classes. */
+	const THEMED = new Set<Family>(['background', 'textColor', 'borderColor']);
+	/** Page elements: the state picked above (Hover…) and dark preview turn edits into variant classes on every breakpoint. */
+	const pagePrefix = (family: Family) =>
+		variantContext
+			? ''
+			: (editor.darkPreview && editor.tokens?.darkSelector && THEMED.has(family) ? 'dark:' : '') +
+				(editor.editState !== 'default' ? STATE_PREFIX[editor.editState] : '');
+	const prefixFor = (family: Family) => (variantContext ? statePrefix : pagePrefix(family) || activePrefix(cls, family, frameWidth));
 
 	// ------------------------------------------------------------ apply
 	function ops(edit: ClassEdit): EditOp[] {
@@ -124,7 +132,11 @@
 		frameWidth !== primaryWidth && families.some((f) => activePrefix(cls, f, frameWidth) !== activePrefix(cls, f, primaryWidth));
 	// Framer semantics: edits apply to this breakpoint and the smaller ones inheriting from it.
 	const set = (family: Family, utilities: string[]) =>
-		variantContext ? setFamily(cls, family, utilities, statePrefix) : responsiveSet(cls, family, utilities, frameWidth, frameWidths);
+		variantContext
+			? setFamily(cls, family, utilities, statePrefix)
+			: pagePrefix(family)
+				? setFamily(cls, family, utilities, pagePrefix(family))
+				: responsiveSet(cls, family, utilities, frameWidth, frameWidths);
 
 	// --------------------------------------------------------- visibility
 	const DISPLAY_UTILITIES = ['block', 'flex', 'grid', 'inline', 'inline-block', 'inline-flex', 'inline-grid', 'contents', 'table'];
@@ -249,8 +261,8 @@
 		return utility.startsWith(utilityPrefix) && !utility.includes('[') ? utility.slice(utilityPrefix.length) : null;
 	}
 
-	function colorUtility(prefix: string, choice: { token: string } | { custom: string }) {
-		if ('token' in choice) return `${prefix}-${choice.token}`;
+	function colorUtility(prefix: string, choice: ColorChoice) {
+		if ('token' in choice) return `${prefix}-${choice.token}${choice.opacity !== undefined && choice.opacity < 100 ? `/${choice.opacity}` : ''}`;
 		const value = choice.custom.replace(/\s+/g, '_');
 		return `${prefix}-[${value}]`;
 	}
@@ -399,6 +411,28 @@
 		<div class="m-3 flex gap-2 rounded-control bg-warning/10 p-2.5 text-[11px] text-label">
 			<TriangleAlert class="size-3.5 shrink-0 text-warning" />
 			<span>{info.readonlyReason ?? m.style_readonly()}</span>
+		</div>
+	{/if}
+
+	{#if info.editable && !variantContext && !editor.editingComponent}
+		<div class="flex flex-col gap-2 border-b border-divider px-4 py-2.5">
+			<Segmented
+				options={[
+					{ value: 'default', label: m.state_default() },
+					{ value: 'hover', label: STATE_LABELS.hover },
+					{ value: 'active', label: STATE_LABELS.active },
+					{ value: 'focus', label: STATE_LABELS.focus }
+				]}
+				value={editor.editState}
+				onchange={(v) => editor.setEditState(v as EditState)}
+			/>
+			{#if editor.editState !== 'default' || (editor.darkPreview && editor.tokens?.darkSelector)}
+				<p class="rounded-control bg-accent-tint px-2.5 py-1.5 text-[11px] text-accent">
+					{editor.editState !== 'default'
+						? m.state_editing({ state: STATE_LABELS[editor.editState], prefix: STATE_PREFIX[editor.editState] })
+						: m.state_dark_editing()}
+				</p>
+			{/if}
 		</div>
 	{/if}
 

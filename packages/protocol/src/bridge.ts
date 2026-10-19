@@ -175,6 +175,8 @@ export type HostToGuest =
 	/** Edit a text layer in place (contenteditable); the guest answers with `text-edited`. */
 	| { type: 'edit-text'; id: NodeId }
 	| { type: 'end-edit-text'; cancel: boolean }
+	/** Marks layers whose :hover / :active / :focus the host forces through DevTools ("none" clears). */
+	| { type: 'force-state'; ids: NodeId[]; state: 'none' | 'hover' | 'active' | 'focus' }
 	/** Puts text back after a refused edit (the frame shows what was typed until then). */
 	| { type: 'set-text'; id: NodeId; text: string };
 

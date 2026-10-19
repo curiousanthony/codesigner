@@ -53,6 +53,14 @@ const session = {
 export type LeftTab = 'pages' | 'layers' | 'assets';
 export type RightTab = 'agent' | 'style';
 export type DrawTool = 'stack' | 'frame' | 'grid' | 'text';
+/** Interaction state being designed on the page (Style panel's state picker). */
+export type EditState = 'default' | 'hover' | 'active' | 'focus';
+const FORCE_RULES = [
+	{ selector: '[data-codesigner-force="none"]', states: [] },
+	{ selector: '[data-codesigner-force="hover"]', states: ['hover'] },
+	{ selector: '[data-codesigner-force="active"]', states: ['hover', 'active'] },
+	{ selector: '[data-codesigner-force="focus"]', states: ['focus', 'focus-visible'] }
+];
 export type Tool = 'select' | 'hand' | 'comment' | DrawTool;
 export const DRAW_TOOLS: readonly DrawTool[] = ['stack', 'frame', 'grid', 'text'];
 export const isDrawTool = (tool: Tool): tool is DrawTool => (DRAW_TOOLS as readonly Tool[]).includes(tool);
@@ -131,6 +139,10 @@ class EditorState {
 	codeCommands: { undo: () => void; redo: () => void; hasFocus: () => boolean } | null = null;
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
+
+	/** Hover / Pressed / Focus: shown forced on the selection, edits write `hover:` … classes. */
+	editState = $state<EditState>('default');
+	private forcedKey = '';
 
 	/** Version history dialog (⇧⌘H). */
 	historyOpen = $state(false);
@@ -757,6 +769,7 @@ class EditorState {
 
 	clearSelection() {
 		this.selection = EMPTY_SELECTION;
+		this.editState = 'default';
 		this.mirrors = {};
 		this.syncHighlights();
 	}
@@ -870,6 +883,42 @@ class EditorState {
 				hover: this.hover?.frameId === frameId ? this.hover.id : null,
 				selected: this.selection.frameId === frameId ? this.selection.ids : (this.mirrors[frameId] ?? [])
 			});
+		}
+		this.syncForcedState();
+	}
+
+	setEditState(state: EditState) {
+		this.editState = state;
+		this.syncForcedState(true);
+	}
+
+	/** Forces the picked state on the selection and its mirrors in every breakpoint (page frames only). */
+	syncForcedState(always = false) {
+		const state = this.editingComponent || this.selection.ids.length === 0 ? 'default' : this.editState;
+		const idsIn = (frameId: string) => (state === 'default' ? [] : this.selection.frameId === frameId ? this.selection.ids : (this.mirrors[frameId] ?? []));
+		const key = state + [...this.frames.keys()].map((f) => `${f}:${idsIn(f).join(',')}`).join('|');
+		if (key === this.forcedKey && !always) return;
+		this.forcedKey = key;
+		for (const [frameId, frame] of this.frames) {
+			if (frameId === 'component') continue;
+			frame.send({ type: 'force-state', ids: idsIn(frameId), state: state === 'default' ? 'none' : state });
+			const id = frame.webContentsId();
+			if (!id) continue;
+			setTimeout(async () => {
+				await invoke('canvas:force-states', id, FORCE_RULES);
+				if (frameId === this.selection.frameId) await this.refreshSelectionInfo();
+			}, 60);
+		}
+	}
+
+	/** Re-reads the selected layers' computed styles (e.g. once a state is forced on them). */
+	private async refreshSelectionInfo() {
+		const { frameId, ids } = this.selection;
+		const frame = frameId ? this.frames.get(frameId) : null;
+		if (!frame || !ids.length) return;
+		const infos = await frame.describe(ids);
+		if (this.selection.frameId === frameId && infos.length === ids.length && infos.every((info, i) => info.id === this.selection.ids[i])) {
+			this.selection = { ...this.selection, infos };
 		}
 	}
 
@@ -1035,6 +1084,7 @@ class EditorState {
 	setDarkPreview(dark: boolean) {
 		this.darkPreview = dark;
 		for (const frame of this.frames.values()) frame.send({ type: 'set-dark', dark });
+		setTimeout(() => void this.refreshSelectionInfo(), 120); // colors shown in the panel follow the theme
 	}
 
 	setScope(files: string[]) {
