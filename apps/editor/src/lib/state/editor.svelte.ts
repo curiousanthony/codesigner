@@ -145,7 +145,7 @@ class EditorState {
 	/** Set while the code editor has focus, so menu undo/redo go to it instead of the visual journal. */
 	codeCommands: { undo: () => void; redo: () => void; hasFocus: () => boolean } | null = null;
 	/** Registered by the Style panel: canvas handles preview (`commit` false) and write padding / gap through it. */
-	styleCommands = $state<{ padding: (side: PaddingSide, value: number, commit: boolean) => void; gap: (value: number, commit: boolean) => void } | null>(null);
+	styleCommands = $state.raw<{ padding: (side: PaddingSide, value: number, commit: boolean) => void; gap: (value: number, commit: boolean) => void } | null>(null);
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
 

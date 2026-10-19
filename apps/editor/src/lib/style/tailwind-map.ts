@@ -234,6 +234,43 @@ export function paddingUtilities(sides: { top: number; right: number; bottom: nu
 	];
 }
 
+type Side = 'top' | 'right' | 'bottom' | 'left';
+const SIDES_OF: Record<string, Side[]> = {
+	p: ['top', 'right', 'bottom', 'left'],
+	px: ['left', 'right'],
+	py: ['top', 'bottom'],
+	pt: ['top'],
+	pr: ['right'],
+	pb: ['bottom'],
+	pl: ['left'],
+	ps: ['left'],
+	pe: ['right']
+};
+
+/** Sides that padding tokens set (`px-6` → left and right). */
+export function paddingSides(tokens: string[]): Set<Side> {
+	const out = new Set<Side>();
+	for (const token of tokens) for (const side of SIDES_OF[parseToken(token).utility.split('-')[0]] ?? []) out.add(side);
+	return out;
+}
+
+/**
+ * Padding utilities for only the `covered` sides (the others keep inheriting):
+ * editing the left of `sm:px-6` gives `sm:pl-11 sm:pr-6`, not all four sides.
+ */
+export function coveredPaddingUtilities(values: Record<Side, number>, covered: Set<Side>): string[] {
+	if (covered.size === 4) return paddingUtilities(values);
+	const out: string[] = [];
+	const pair = (a: Side, b: Side, both: string, one: Record<Side, string>) => {
+		if (covered.has(a) && covered.has(b) && values[a] === values[b]) out.push(spacing(both, values[a]));
+		else for (const s of [a, b]) if (covered.has(s)) out.push(spacing(one[s], values[s]));
+	};
+	const one = { top: 'pt', bottom: 'pb', left: 'pl', right: 'pr' };
+	pair('left', 'right', 'px', one);
+	pair('top', 'bottom', 'py', one);
+	return out;
+}
+
 /** Arbitrary px value utility (the engine canonicalizes it when a theme step matches). */
 export const arbitraryPx = (prefix: string, value: number) => `${prefix}-[${Math.round(value * 100) / 100}px]`;
 

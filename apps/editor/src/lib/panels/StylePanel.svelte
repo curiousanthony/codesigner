@@ -38,6 +38,8 @@
 		px,
 		responsiveSet,
 		paddingUtilities,
+		paddingSides,
+		coveredPaddingUtilities,
 		DEFAULT_BREAKPOINTS,
 		setFamily,
 		sizeClasses,
@@ -237,7 +239,10 @@
 	function paddingEdit(side: PaddingSide, value: number): ClassEdit {
 		if (side === 'all') return set('padding', [spacing('p', value)]);
 		// Expand shorthands to per-side classes so other sides keep their values.
-		return set('padding', paddingUtilities({ ...padding, [side]: value }));
+		// Only the sides already set where this edit lands, plus this one: the rest keep inheriting.
+		const covered = paddingSides(familyTokens(cls, 'padding', prefixFor('padding')));
+		covered.add(side);
+		return set('padding', coveredPaddingUtilities({ ...padding, [side]: value }, covered));
 	}
 
 	function setPadding(side: PaddingSide, value: number, coalesce: boolean) {
@@ -246,11 +251,15 @@
 
 	// Canvas handles (padding / gap) edit through the same rules as the fields here.
 	$effect(() => {
-		editor.styleCommands = {
+		const commands: NonNullable<typeof editor.styleCommands> = {
 			padding: (side, value, commit) => (commit ? setPadding(side, value, false) : preview(paddingEdit(side, value))),
 			gap: (value, commit) => (commit ? apply(m.edit_gap(), set('gap', [spacing('gap', value)])) : preview(set('gap', [spacing('gap', value)])))
 		};
-		return () => (editor.styleCommands = null);
+		editor.styleCommands = commands;
+		// A panel replaced by a newer one (hot reload, remount) must not unregister the newer one's commands.
+		return () => {
+			if (editor.styleCommands === commands) editor.styleCommands = null;
+		};
 	});
 
 	// ------------------------------------------------------------ styles

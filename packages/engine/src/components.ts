@@ -200,7 +200,8 @@ export function scanComponents(root: string, libDir = 'src/lib', libAlias = '$li
 		const parts = fromLib.split('/');
 		const dirName = basename(dirname(file));
 		const fileBase = basename(file, '.svelte');
-		const group = parts.length > 2 ? parts[parts.length - 3] : parts.length > 1 ? parts[0] : '';
+		// shadcn primitives group as "ui"; everything else by its folder (crm, billing…), like the file tree.
+		const group = parts.includes('ui') ? 'ui' : parts.length > 1 ? parts[parts.length - 2] : '';
 		let props: ComponentProp[] = [];
 		let variants: VariantGroup[] = [];
 		let styled = false;

@@ -69,6 +69,8 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 
 ## M3 — Components & tokens 🚧
 
+Tried on the real SaaS (all undone, worktree clean): hover state and `dark:` edits, dragging one of its components from Assets, padding handles on a responsive container (`sm:pr-6 sm:pl-11`), Create component on its hero (5 props, imports moved; `svelte-check` error count unchanged).
+
 - ✅ Assets panel: components (grouped, e.g. `ui/`), color tokens (light/dark), images in `static/` and `src/lib/assets` with thumbnails; all draggable onto the canvas
 - ⬜ Assets: typography tokens
 - ⬜ Design tokens editor: light/dark values from `:root` / `.dark` / `@theme`, alias chains, add a token

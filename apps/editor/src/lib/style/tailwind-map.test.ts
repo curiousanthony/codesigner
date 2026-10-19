@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { activePrefix, familyTokens, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
+import { activePrefix, coveredPaddingUtilities, familyTokens, paddingSides, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
 
 describe('tailwind map', () => {
 	test('parses variant prefixes', () => {
@@ -84,5 +84,20 @@ describe('paddingUtilities', () => {
 		expect(paddingUtilities({ top: 8, right: 16, bottom: 8, left: 16 })).toEqual(['px-4', 'py-2']);
 		expect(paddingUtilities({ top: 8, right: 4, bottom: 8, left: 16 })).toEqual(['py-2', 'pl-4', 'pr-1']);
 		expect(paddingUtilities({ top: 1, right: 2, bottom: 3, left: 4 })).toEqual(['pt-[1px]', 'pb-[3px]', 'pl-1', 'pr-0.5']);
+	});
+});
+
+describe('coveredPaddingUtilities', () => {
+	const values = { top: 28, right: 24, bottom: 96, left: 44 };
+	test('only the sides already set at that breakpoint, plus the edited one', () => {
+		const covered = paddingSides(['sm:px-6']);
+		covered.add('left');
+		expect(coveredPaddingUtilities(values, covered)).toEqual(['pl-11', 'pr-6']);
+	});
+	test('a single new side', () => {
+		expect(coveredPaddingUtilities(values, new Set(['top']))).toEqual(['pt-7']);
+	});
+	test('pairs collapse when equal', () => {
+		expect(coveredPaddingUtilities({ ...values, left: 24 }, paddingSides(['px-6']))).toEqual(['px-6']);
 	});
 });
