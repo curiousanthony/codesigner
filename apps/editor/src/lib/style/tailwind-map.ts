@@ -221,6 +221,19 @@ export function spacing(prefix: string, value: number): string {
 	return `${prefix}-[${Math.round(value * 100) / 100}px]`;
 }
 
+/** Fewest padding utilities for four sides, the way they'd be written by hand (`px-8 pt-14 pb-8`). */
+export function paddingUtilities(sides: { top: number; right: number; bottom: number; left: number }): string[] {
+	const { top, right, bottom, left } = sides;
+	if (top === right && right === bottom && bottom === left) return [spacing('p', top)];
+	const x = left === right;
+	const y = top === bottom;
+	return [
+		...(x ? [spacing('px', left)] : []),
+		...(y ? [spacing('py', top)] : [spacing('pt', top), spacing('pb', bottom)]),
+		...(x ? [] : [spacing('pl', left), spacing('pr', right)])
+	];
+}
+
 /** Arbitrary px value utility (the engine canonicalizes it when a theme step matches). */
 export const arbitraryPx = (prefix: string, value: number) => `${prefix}-[${Math.round(value * 100) / 100}px]`;
 

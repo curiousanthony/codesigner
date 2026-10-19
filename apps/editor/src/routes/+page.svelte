@@ -98,6 +98,7 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
+		if (event.key === 'Alt') editor.altHeld = true;
 		if (!editor.project || editor.startChoice || editor.historyOpen || isTyping(event)) return;
 		const mod = event.metaKey || event.ctrlKey;
 		if (event.code === 'Space' && !event.repeat) {
@@ -161,6 +162,7 @@
 
 	function onkeyup(event: KeyboardEvent) {
 		if (event.code === 'Space') editor.spaceHeld = false;
+		if (event.key === 'Alt') editor.altHeld = false;
 	}
 
 	onMount(() => {
@@ -169,7 +171,7 @@
 	});
 </script>
 
-<svelte:window {onkeydown} {onkeyup} onblur={() => (editor.spaceHeld = false)} />
+<svelte:window {onkeydown} {onkeyup} onblur={() => ((editor.spaceHeld = false), (editor.altHeld = false))} />
 
 {#if !editor.project}
 	<Welcome />

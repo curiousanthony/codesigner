@@ -53,6 +53,7 @@ const session = {
 export type LeftTab = 'pages' | 'layers' | 'assets';
 export type RightTab = 'agent' | 'style';
 export type DrawTool = 'stack' | 'frame' | 'grid' | 'text';
+export type PaddingSide = 'all' | 'top' | 'right' | 'bottom' | 'left';
 /** Interaction state being designed on the page (Style panel's state picker). */
 export type EditState = 'default' | 'hover' | 'active' | 'focus';
 const FORCE_RULES = [
@@ -109,6 +110,8 @@ class EditorState {
 	rightTab = $state<RightTab>('style');
 	tool = $state<Tool>('select');
 	spaceHeld = $state(false);
+	/** ⌥ held: measure from the selection to the hovered layer. */
+	altHeld = $state(false);
 	mode = $state<CanvasMode>('design');
 	darkPreview = $state(false);
 
@@ -137,6 +140,8 @@ class EditorState {
 	codeHeight = $state(320);
 	/** Set while the code editor has focus, so menu undo/redo go to it instead of the visual journal. */
 	codeCommands: { undo: () => void; redo: () => void; hasFocus: () => boolean } | null = null;
+	/** Registered by the Style panel: canvas handles preview (`commit` false) and write padding / gap through it. */
+	styleCommands = $state<{ padding: (side: PaddingSide, value: number, commit: boolean) => void; gap: (value: number, commit: boolean) => void } | null>(null);
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
 

@@ -17,7 +17,7 @@
 		TriangleAlert,
 		Repeat
 	} from '@lucide/svelte';
-	import { editor, type EditState } from '#lib/state/editor.svelte.js';
+	import { editor, type EditState, type PaddingSide } from '#lib/state/editor.svelte.js';
 	import { invoke } from '#lib/api.js';
 	import Section from '#lib/ui/Section.svelte';
 	import Row from '#lib/ui/Row.svelte';
@@ -37,6 +37,7 @@
 		parseToken,
 		px,
 		responsiveSet,
+		paddingUtilities,
 		DEFAULT_BREAKPOINTS,
 		setFamily,
 		sizeClasses,
@@ -233,19 +234,24 @@
 	const padding = $derived(c?.padding ?? { top: 0, right: 0, bottom: 0, left: 0 });
 	const uniformPadding = $derived(padding.top === padding.right && padding.right === padding.bottom && padding.bottom === padding.left);
 
-	function setPadding(side: 'all' | 'top' | 'right' | 'bottom' | 'left', value: number, coalesce: boolean) {
-		const utility = side === 'all' ? spacing('p', value) : spacing({ top: 'pt', right: 'pr', bottom: 'pb', left: 'pl' }[side], value);
-		let edit: ClassEdit;
-		if (side === 'all') {
-			edit = set('padding', [utility]);
-		} else {
-			// Expand shorthands to per-side classes so other sides keep their values.
-			const sides = { ...padding, [side]: value };
-			const utilities = (['top', 'right', 'bottom', 'left'] as const).map((s) => spacing({ top: 'pt', right: 'pr', bottom: 'pb', left: 'pl' }[s], sides[s]));
-			edit = set('padding', utilities);
-		}
-		void apply(m.edit_padding(), edit, coalesce);
+	function paddingEdit(side: PaddingSide, value: number): ClassEdit {
+		if (side === 'all') return set('padding', [spacing('p', value)]);
+		// Expand shorthands to per-side classes so other sides keep their values.
+		return set('padding', paddingUtilities({ ...padding, [side]: value }));
 	}
+
+	function setPadding(side: PaddingSide, value: number, coalesce: boolean) {
+		void apply(m.edit_padding(), paddingEdit(side, value), coalesce);
+	}
+
+	// Canvas handles (padding / gap) edit through the same rules as the fields here.
+	$effect(() => {
+		editor.styleCommands = {
+			padding: (side, value, commit) => (commit ? setPadding(side, value, false) : preview(paddingEdit(side, value))),
+			gap: (value, commit) => (commit ? apply(m.edit_gap(), set('gap', [spacing('gap', value)])) : preview(set('gap', [spacing('gap', value)])))
+		};
+		return () => (editor.styleCommands = null);
+	});
 
 	// ------------------------------------------------------------ styles
 	const colorOptions = $derived.by((): ColorOption[] =>

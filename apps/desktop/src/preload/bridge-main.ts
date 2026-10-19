@@ -351,6 +351,16 @@ export function bridgeMain(config: BridgeConfig) {
 			componentName: f.componentTag
 		}));
 
+	const childOffsets = (rec: LayerRec | null, el: Element): Rect[] => {
+		const display = getComputedStyle(el).display;
+		if (!rec || !/flex|grid/.test(display)) return [];
+		const box = el.getBoundingClientRect();
+		return rec.children
+			.map((c) => unionRect(c.els))
+			.filter((r): r is Rect => !!r && (r.width > 0 || r.height > 0))
+			.map((r) => ({ x: r.x - box.x, y: r.y - box.y, width: r.width, height: r.height }));
+	};
+
 	const describe = (id: NodeId): ElementInfo | null => {
 		const rec = recFor(id);
 		const el = rec?.els[0] ?? elFor(id);
@@ -386,7 +396,8 @@ export function bridgeMain(config: BridgeConfig) {
 			readonlyReason: layer ? null : meta ? 'Rendered outside your source files' : 'No source information',
 			childCount: rec?.children.length ?? el.children.length,
 			slot: el.getAttribute('data-slot'),
-			context: cellContext(el)
+			context: cellContext(el),
+			childOffsets: childOffsets(rec, el)
 		};
 	};
 

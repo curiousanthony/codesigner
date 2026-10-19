@@ -7,6 +7,7 @@
 	import { invoke } from '#lib/api.js';
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
+	import { measure } from './measure';
 	import { m } from '#lib/paraglide/messages.js';
 
 	type Props = {
@@ -57,6 +58,13 @@
 	const selectedRects = $derived(editor.selectedRects[frameId] ?? {});
 	const selectedComponent = $derived(editor.selected?.kind === 'instance');
 	const hoverRect = $derived(editor.hoverRect?.frameId === frameId ? editor.hoverRect.rect : null);
+	/** ⌥ distances from the selection to the hovered layer (Framer's red measurement lines). */
+	const measures = $derived.by(() => {
+		if (!editor.altHeld || !hoverRect || editor.selection.frameId !== frameId || !editor.hover) return [];
+		const first = editor.selection.ids[0];
+		const from = first ? selectedRects[first] : null;
+		return from && !editor.selection.ids.includes(editor.hover.id) ? measure(from, hoverRect) : [];
+	});
 
 	function onMessage(message: GuestToHost) {
 		switch (message.type) {
@@ -191,7 +199,8 @@
 		const path = await client.hit(x, y);
 		if (seq !== hoverSeq) return;
 		lastHit = path;
-		const id = editor.pick(path, event.metaKey || event.ctrlKey ? 'deep' : 'click', frameId);
+		// ⌥ measures to whatever is under the pointer, so pick the innermost layer.
+		const id = editor.pick(path, event.metaKey || event.ctrlKey || event.altKey ? 'deep' : 'click', frameId);
 		editor.setHover(frameId, id);
 	}
 
@@ -332,6 +341,80 @@
 
 	function oncontextmenu(event: MouseEvent) {
 		event.preventDefault();
+	}
+
+	// --------------------------------------------- padding / gap handles
+	type HandleKind = 'top' | 'right' | 'bottom' | 'left' | 'gap';
+	const handleLayer = $derived.by(() => {
+		const info = editor.selected;
+		if (!designMode || dragging || !editor.styleCommands || editor.selection.frameId !== frameId || editor.selection.ids.length !== 1) return null;
+		if (!info?.editable || !info.loc || isComponentCanvas) return null;
+		const rect = selectedRects[info.id];
+		if (!rect || rect.width * scale < 60 || rect.height * scale < 36) return null;
+		const c = info.computed;
+		const layout = /flex|grid/.test(c.display);
+		const p = c.padding;
+		if (!layout && !(p.top || p.right || p.bottom || p.left)) return null;
+		return { info, rect, padding: p, layout };
+	});
+	/** Bands (guest px) where each handle sits: the padding on each side, and the first gap between children. */
+	const handles = $derived.by(() => {
+		if (!handleLayer) return [];
+		const { rect: r, padding: p, info } = handleLayer;
+		const out: { kind: HandleKind; band: Rect; vertical: boolean; value: number }[] = [
+			{ kind: 'top', band: { x: r.x + p.left, y: r.y, width: r.width - p.left - p.right, height: p.top }, vertical: false, value: p.top },
+			{ kind: 'bottom', band: { x: r.x + p.left, y: r.y + r.height - p.bottom, width: r.width - p.left - p.right, height: p.bottom }, vertical: false, value: p.bottom },
+			{ kind: 'left', band: { x: r.x, y: r.y + p.top, width: p.left, height: r.height - p.top - p.bottom }, vertical: true, value: p.left },
+			{ kind: 'right', band: { x: r.x + r.width - p.right, y: r.y + p.top, width: p.right, height: r.height - p.top - p.bottom }, vertical: true, value: p.right }
+		];
+		const kids = info.childOffsets ?? [];
+		if (handleLayer.layout && kids.length >= 2) {
+			const [a, b] = kids;
+			const row = b.x >= a.x + a.width - 1;
+			const gap = row ? b.x - (a.x + a.width) : b.y - (a.y + a.height);
+			if (gap >= 0) {
+				out.push({
+					kind: 'gap',
+					band: row
+						? { x: r.x + a.x + a.width, y: r.y + Math.min(a.y, b.y), width: gap, height: Math.max(a.height, b.height) }
+						: { x: r.x + Math.min(a.x, b.x), y: r.y + a.y + a.height, width: Math.max(a.width, b.width), height: gap },
+					vertical: row,
+					value: Math.round(gap)
+				});
+			}
+		}
+		return out;
+	});
+
+	let handleDrag = $state<{ kind: HandleKind; value: number } | null>(null);
+	let handleHover = $state<HandleKind | null>(null);
+
+	function onhandledown(event: PointerEvent, handle: (typeof handles)[number]) {
+		event.stopPropagation();
+		event.preventDefault();
+		const el = event.currentTarget as HTMLElement;
+		el.setPointerCapture(event.pointerId);
+		const start = { x: event.clientX, y: event.clientY };
+		const sign = handle.kind === 'bottom' || handle.kind === 'right' ? -1 : 1;
+		let value = handle.value;
+		const move = (e: PointerEvent) => {
+			const delta = (handle.vertical ? e.clientX - start.x : e.clientY - start.y) / scale;
+			const raw = Math.max(0, handle.value + (handle.kind === 'gap' ? delta : sign * delta));
+			value = e.altKey ? Math.round(raw) : Math.round(raw / 4) * 4;
+			handleDrag = { kind: handle.kind, value };
+			if (handle.kind === 'gap') editor.styleCommands?.gap(value, false);
+			else editor.styleCommands?.padding(e.shiftKey ? 'all' : handle.kind, value, false);
+		};
+		const up = (e: PointerEvent) => {
+			el.removeEventListener('pointermove', move);
+			el.removeEventListener('pointerup', up);
+			handleDrag = null;
+			if (value === handle.value) return editor.clearPreview();
+			if (handle.kind === 'gap') editor.styleCommands?.gap(value, true);
+			else editor.styleCommands?.padding(e.shiftKey ? 'all' : handle.kind, value, true);
+		};
+		el.addEventListener('pointermove', move);
+		el.addEventListener('pointerup', up);
 	}
 
 	const label = $derived(breakpointLabel(breakpoint));
@@ -500,6 +583,45 @@
 
 		<!-- Overlays -->
 		<div class="pointer-events-none absolute inset-0 z-20">
+			{#if measures.length}
+				{#each measures as line, i (i)}
+					{@const vertical = line.x1 === line.x2}
+					<div class="absolute bg-[#f43f5e]"
+						style="left:{Math.min(line.x1, line.x2)}px; top:{Math.min(line.y1, line.y2)}px;
+							width:{vertical ? 'calc(1px * var(--inv))' : Math.abs(line.x2 - line.x1) + 'px'};
+							height:{vertical ? Math.abs(line.y2 - line.y1) + 'px' : 'calc(1px * var(--inv))'};"></div>
+					<span class="absolute rounded-[4px] bg-[#f43f5e] px-1 py-px text-[10px] font-medium whitespace-nowrap text-white tabular-nums"
+						style="left:{(line.x1 + line.x2) / 2}px; top:{(line.y1 + line.y2) / 2}px; transform: translate(-50%, -50%) scale(var(--inv));">
+						{line.value}
+					</span>
+				{/each}
+			{/if}
+			{#each handles as handle (handle.kind)}
+				{@const active = handleDrag?.kind === handle.kind || handleHover === handle.kind}
+				{@const b = handle.band}
+				{#if active}
+					<div class="absolute" style="left:{b.x}px; top:{b.y}px; width:{Math.max(b.width, 0)}px; height:{Math.max(b.height, 0)}px;
+						background: repeating-linear-gradient(-45deg, rgba(244,63,94,.28) 0 calc(2px * var(--inv)), rgba(244,63,94,.08) 0 calc(6px * var(--inv)));"></div>
+				{/if}
+				<button
+					type="button"
+					class="pointer-events-auto absolute rounded-full bg-[#f43f5e] shadow-[0_0_0_calc(1px*var(--inv))_white]"
+					style="left:{b.x + b.width / 2}px; top:{b.y + b.height / 2}px; transform: translate(-50%, -50%);
+						width:calc({handle.vertical ? 4 : 16}px * var(--inv)); height:calc({handle.vertical ? 16 : 4}px * var(--inv));
+						cursor:{handle.vertical ? 'ew-resize' : 'ns-resize'};"
+					aria-label={handle.kind === 'gap' ? m.label_gap() : `${m.label_padding()} ${handle.kind}`}
+					data-handle={handle.kind}
+					onpointerdown={(e) => onhandledown(e, handle)}
+					onpointerenter={() => (handleHover = handle.kind)}
+					onpointerleave={() => (handleHover = null)}
+				></button>
+				{#if active}
+					<span class="absolute rounded-[4px] bg-[#f43f5e] px-1 py-px text-[10px] font-medium text-white tabular-nums"
+						style="left:{b.x + b.width / 2}px; top:{b.y + b.height / 2}px; transform: translate({handle.vertical ? '8px' : '-50%'}, {handle.vertical ? '-50%' : '6px'}) scale(var(--inv)); transform-origin: left top;">
+						{handleDrag?.kind === handle.kind ? handleDrag.value : handle.value}
+					</span>
+				{/if}
+			{/each}
 			{#if drawing && dropPreview}
 				{@const p = dropPreview.parentRect}
 				<div class="absolute" style="left:{p.x}px; top:{p.y}px; width:{p.width}px; height:{p.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);"></div>

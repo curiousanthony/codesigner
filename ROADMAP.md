@@ -62,7 +62,8 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Color picker: token swatches with search and an opacity modifier (`bg-primary/80`), custom colors with saturation/brightness, hue and alpha (one write on release), hex input; opens upwards near the bottom
 - ⬜ Color picker: rgb/hsl/oklch input modes, eyedropper
 - ✅ Scrub-to-change numeric inputs (drag the field), arrow keys ±1 / ⇧ ±10 / ⌥ ±0.1, math in fields
-- ⬜ Smart guides, ⌥ distance measurement, padding/gap handles on canvas
+- ✅ ⌥ distance measurement (red lines to the hovered layer; four sides when nested) and padding / gap handles on the canvas (drag with live preview, 4px steps, ⌥ 1px, ⇧ all sides; writes `px-8 pt-14 pb-8`-style classes)
+- ⬜ Smart guides when moving absolutely positioned layers
 - ✅ Interact mode (use the app normally, `⌘E`) vs Design mode toggle
 - ✅ Optimistic preview CSS during scrubs (one file write on release)
 

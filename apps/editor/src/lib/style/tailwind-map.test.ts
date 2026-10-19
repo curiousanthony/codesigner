@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { activePrefix, familyTokens, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
+import { activePrefix, familyTokens, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
 
 describe('tailwind map', () => {
 	test('parses variant prefixes', () => {
@@ -74,5 +74,15 @@ describe('tailwind map', () => {
 		test('a value with no class to restore applies to larger frames too', () => {
 			expect(responsiveSet('flex', 'gap', ['gap-4'], 390, frames)).toEqual({ remove: [], add: ['gap-4'] });
 		});
+	});
+});
+
+describe('paddingUtilities', () => {
+	test('collapses sides like hand-written classes', () => {
+		expect(paddingUtilities({ top: 32, right: 32, bottom: 32, left: 32 })).toEqual(['p-8']);
+		expect(paddingUtilities({ top: 56, right: 32, bottom: 32, left: 32 })).toEqual(['px-8', 'pt-14', 'pb-8']);
+		expect(paddingUtilities({ top: 8, right: 16, bottom: 8, left: 16 })).toEqual(['px-4', 'py-2']);
+		expect(paddingUtilities({ top: 8, right: 4, bottom: 8, left: 16 })).toEqual(['py-2', 'pl-4', 'pr-1']);
+		expect(paddingUtilities({ top: 1, right: 2, bottom: 3, left: 4 })).toEqual(['pt-[1px]', 'pb-[3px]', 'pl-1', 'pr-0.5']);
 	});
 });

@@ -112,6 +112,8 @@ export interface ElementInfo {
 	childCount: number;
 	/** data-slot attribute used by shadcn-svelte components. */
 	slot: string | null;
+	/** Flex/grid containers: boxes of the child layers, relative to this layer's box (for gap handles). */
+	childOffsets?: Rect[];
 	/** On the component canvas: the variant values (and `state`) of the cell this element is the root of. */
 	context?: Record<string, string> | null;
 }
