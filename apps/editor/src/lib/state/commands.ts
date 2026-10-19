@@ -75,7 +75,7 @@ export async function drawLayer(kind: DrawTool, frameId: string, target: DropTar
 	]);
 	const loc = result?.created?.[0];
 	// A new text layer goes straight into typing, like Framer's T tool.
-	if (loc) pendingSelect({ ...loc, tag: kind === 'text' ? 'p' : 'div' }, frameId, kind === 'text' ? (id) => editor.startTextEdit(frameId, id) : undefined);
+	if (loc) pendingSelect({ ...loc, tag: kind === 'text' ? 'p' : 'div' }, frameId, kind === 'text' ? (id) => void editor.startTextEdit(frameId, id) : undefined);
 }
 
 export async function unwrapSelection() {

@@ -249,7 +249,8 @@ class EditorState {
 			this.branches = project.isGitRepo ? await invoke('branch:list', project.root) : [];
 			this.startChoice = null;
 			if (project.settings.versioning === 'branches' && project.isGitRepo) {
-				const design = this.branches.find((b) => !b.isMainCheckout && b.name.startsWith('design/'));
+				const designs = this.branches.filter((b) => !b.isMainCheckout && b.name.startsWith('design/'));
+				const design = designs.find((b) => b.name === project.settings.lastBranch) ?? designs[0];
 				if (!design) {
 					// First design session: ask which branch to start from (see StartDesign.svelte).
 					this.startChoice = await invoke('branch:sources', project.root);
@@ -350,6 +351,8 @@ class EditorState {
 		if (this.worktree && this.worktree !== worktree) void invoke('devserver:stop', this.worktree);
 		this.worktree = worktree;
 		this.selection = EMPTY_SELECTION;
+		const branch = this.branches.find((b) => b.worktree === worktree && !b.isMainCheckout);
+		if (branch && branch.name !== this.project?.settings.lastBranch) void this.updateSettings({ lastBranch: branch.name });
 		this.trees = {};
 		this.logs = await invoke('devserver:logs', worktree);
 		this.devServer = await invoke('devserver:state', worktree);
@@ -643,12 +646,19 @@ class EditorState {
 		}
 	}
 
-	/** Edits a text layer in place (double-click, or right after drawing it with T). */
-	startTextEdit(frameId: string, id: NodeId) {
+	/** Edits a text layer in place (double-click, or right after drawing it with T). Static text only. */
+	async startTextEdit(frameId: string, id: NodeId): Promise<boolean> {
 		const frame = this.frames.get(frameId);
 		const info = this.selection.frameId === frameId ? this.selection.infos.find((i) => i.id === id) : null;
-		if (!frame || !info?.loc || !info.textEditable) return false;
-		this.textEditing = { frameId, id, loc: { ...info.loc, tag: info.tag } };
+		if (!frame || !this.worktree || !info?.loc || !info.textEditable) return false;
+		const loc = { ...info.loc, tag: info.tag };
+		// `<p>{user.name}</p>` renders plain text too: only text written in the markup can be typed over.
+		const source = await invoke('source:inspect', this.worktree, loc).catch(() => null);
+		if (source?.text == null) {
+			this.toast(m.text_dynamic());
+			return false;
+		}
+		this.textEditing = { frameId, id, loc };
 		frame.focus();
 		frame.send({ type: 'edit-text', id });
 		return true;
@@ -659,13 +669,15 @@ class EditorState {
 		this.frames.get(this.textEditing.frameId)?.send({ type: 'end-edit-text', cancel });
 	}
 
-	async onTextEdited(frameId: string, id: NodeId, text: string, cancelled: boolean) {
+	async onTextEdited(frameId: string, id: NodeId, text: string, original: string, cancelled: boolean) {
 		const editing = this.textEditing;
 		if (!editing || editing.frameId !== frameId || editing.id !== id) return;
 		this.textEditing = null;
 		// Give the keyboard back to the editor, or shortcuts would keep going to the frame.
 		if (document.activeElement?.tagName === 'WEBVIEW') (document.activeElement as HTMLElement).blur();
-		if (!cancelled) await this.edit(m.edit_text(), [{ type: 'text', target: editing.loc, text }]);
+		if (cancelled) return;
+		const ok = await this.edit(m.edit_text(), [{ type: 'text', target: editing.loc, text }]);
+		if (!ok) this.frames.get(frameId)?.send({ type: 'set-text', id, text: original });
 	}
 
 	async selectParent() {

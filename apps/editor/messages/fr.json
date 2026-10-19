@@ -240,6 +240,7 @@
 	"tab_layers": "Calques",
 	"tab_pages": "Pages",
 	"tab_style": "Style",
+	"text_dynamic": "Ce texte vient du code (une variable ou une expression). Modifiez-le dans le panneau de code (⌘J).",
 	"tool_comment": "Commentaire (C)",
 	"tool_hand": "Main (Espace)",
 	"tool_insert": "Insérer",

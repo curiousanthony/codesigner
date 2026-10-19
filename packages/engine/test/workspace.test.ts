@@ -127,6 +127,29 @@ describe('structure', () => {
 		ws.undo();
 		ws.undo();
 	});
+
+	test('reports where a drawn layer landed next to look-alike siblings', async () => {
+		const page = 'src/routes/test/look-alike.svelte';
+		const { writeFileSync } = await import('node:fs');
+		writeFileSync(join(project.dir, page), '<div class="flex flex-col">\n\t<div class="a"></div>\n\t<p>Text</p>\n\t<p>Text</p>\n</div>\n');
+		const text = () => readFileSync(join(project.dir, page), 'utf8');
+		const loc = (needle: string, nth = 0) => {
+			let offset = -1;
+			for (let i = 0; i <= nth; i++) offset = text().indexOf(needle, offset + 1);
+			return locOf(text().slice(0, offset) + '\u0000' + text().slice(offset), '\u0000', page);
+		};
+		const parent = loc('<div class="flex');
+		const cases: [string, 'before' | 'after', string, string, number][] = [
+			['<div class="a">', 'before', '<div class="h-4"></div>', '<div class="h-4"', 0],
+			['<div class="a">', 'after', '<div class="b"></div>', '<div class="b"', 0],
+			['<p>Text</p>', 'after', '<p>Text</p>', '<p>Text</p>', 1]
+		];
+		for (const [anchor, position, markup, expect_, nth] of cases) {
+			const result = await ws.apply({ label: 'draw', ops: [{ type: 'insert', parent, index: -1, markup, anchor: { target: loc(anchor), position } }] });
+			expect(result.ok).toBe(true);
+			expect(result.created).toEqual([loc(expect_, nth)]);
+		}
+	});
 });
 
 describe('history', () => {

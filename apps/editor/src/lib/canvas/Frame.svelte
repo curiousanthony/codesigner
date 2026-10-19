@@ -92,7 +92,7 @@
 				client?.send({ type: 'request-tree' });
 				break;
 			case 'text-edited':
-				void editor.onTextEdited(frameId, message.id, message.text, message.cancelled);
+				void editor.onTextEdited(frameId, message.id, message.text, message.original, message.cancelled);
 				break;
 			case 'scrolled':
 				if (!message.consumed) {
@@ -215,7 +215,7 @@
 		// Double-clicking the selected text layer edits it in place, like Framer.
 		const current = editor.selected;
 		if (gesture === 'double' && current?.textEditable && editor.selection.frameId === frameId && path.includes(current.id)) {
-			editor.startTextEdit(frameId, current.id);
+			void editor.startTextEdit(frameId, current.id);
 			return;
 		}
 		await editor.selectFromHit(frameId, path, gesture, event.shiftKey);

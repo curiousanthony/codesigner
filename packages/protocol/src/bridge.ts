@@ -173,7 +173,9 @@ export type HostToGuest =
 	| { type: 'navigate'; url: string }
 	/** Edit a text layer in place (contenteditable); the guest answers with `text-edited`. */
 	| { type: 'edit-text'; id: NodeId }
-	| { type: 'end-edit-text'; cancel: boolean };
+	| { type: 'end-edit-text'; cancel: boolean }
+	/** Puts text back after a refused edit (the frame shows what was typed until then). */
+	| { type: 'set-text'; id: NodeId; text: string };
 
 export type GuestToHost =
 	| { type: 'ready'; url: string; title: string; svelteDev: boolean }
@@ -190,4 +192,4 @@ export type GuestToHost =
 	| { type: 'scrolled'; consumed: boolean; dx: number; dy: number }
 	| { type: 'key'; key: string; code: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }
 	| { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
-	| { type: 'text-edited'; id: NodeId; text: string; cancelled: boolean };
+	| { type: 'text-edited'; id: NodeId; text: string; original: string; cancelled: boolean };

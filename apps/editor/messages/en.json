@@ -240,6 +240,7 @@
 	"tab_layers": "Layers",
 	"tab_pages": "Pages",
 	"tab_style": "Style",
+	"text_dynamic": "This text comes from code (a variable or expression). Edit it in the code panel (⌘J).",
 	"tool_comment": "Comment (C)",
 	"tool_hand": "Hand (Space)",
 	"tool_insert": "Insert",

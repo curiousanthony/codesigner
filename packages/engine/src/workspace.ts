@@ -238,7 +238,7 @@ export class Workspace {
 				const entry = texts.get(file) ?? { before: this.read(file), current: this.read(file) };
 				const previous = entry.current;
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
-				if (op.type === 'insert') created.push(insertedAt(file, previous, entry.current));
+				if (op.type === 'insert') created.push(insertedAt(file, previous, entry.current, op.markup));
 				texts.set(file, entry);
 			}
 		} catch (error) {
@@ -431,13 +431,18 @@ export class Workspace {
 	}
 }
 
-/** Where an insert put its markup: the first tag after the common prefix of the two texts. */
-function insertedAt(file: string, before: string, after: string): SourceLoc {
-	let i = 0;
-	while (i < before.length && before.charCodeAt(i) === after.charCodeAt(i)) i++;
-	// The prefix can end inside the leading indentation or on the previous `<`; back up to a line start.
-	while (i > 0 && after[i - 1] !== '\n' && /\s|</.test(after[i - 1])) i--;
-	const start = after.indexOf('<', i);
+/**
+ * Where an insert put its markup. The common prefix of the two texts can run
+ * into the new markup when a sibling starts the same way (`<div class="…`),
+ * so search for the markup's first line from the earliest place it can start.
+ */
+function insertedAt(file: string, before: string, after: string, markup: string): SourceLoc {
+	let prefix = 0;
+	while (prefix < before.length && before.charCodeAt(prefix) === after.charCodeAt(prefix)) prefix++;
+	const added = after.length - before.length;
+	const first = markup.split('\n')[0];
+	let start = after.indexOf(first, Math.max(0, prefix - added));
+	if (start < 0) start = after.indexOf('<', prefix);
 	const lines = after.slice(0, start).split('\n');
 	return { file, line: lines.length, column: lines[lines.length - 1].length };
 }

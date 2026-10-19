@@ -37,6 +37,8 @@ export interface ProjectSettings {
 	routeParams: Record<string, Record<string, string>>;
 	/** Breakpoint frames shown on the canvas for every page. */
 	breakpoints: Breakpoint[];
+	/** Design branch open last time, reopened next time. */
+	lastBranch?: string;
 }
 
 export interface Breakpoint {

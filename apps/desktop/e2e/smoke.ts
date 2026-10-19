@@ -6,9 +6,9 @@
 import { nativeShot } from './capture.ts';
 import { _electron as electron, type Page } from 'playwright-core';
 import { execSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const repo = join(import.meta.dirname, '..', '..', '..');
 const shots = process.env.SHOTS ?? join(tmpdir(), 'codesigner-shots');
@@ -17,6 +17,8 @@ execSync(`mkdir -p ${shots}`);
 const work = mkdtempSync(join(tmpdir(), 'codesigner-e2e-'));
 const project = join(work, 'kit2-app');
 execSync(`cp -cR ${join(repo, 'fixtures/kit2-app')} ${project}`);
+// A git repo with a second branch, so opening it asks where to start designing from.
+execSync('git init -q -b main && git add -A && git commit -qm init && git branch feature/onboarding', { cwd: project });
 const userData = join(work, 'user-data');
 
 const app = await electron.launch({
@@ -37,6 +39,10 @@ await page.waitForSelector('[aria-labelledby="start-design-title"]', { timeout: 
 log('start dialog branches:', await page.locator('[data-branch]').evaluateAll((els) => els.map((e) => e.getAttribute('data-branch'))));
 await shot('01b-start-design');
 await page.getByRole('button', { name: 'Start designing' }).click();
+await page.waitForFunction(() => (window as any).__editor.worktree !== null, null, { timeout: 30_000 });
+log('design branch:', await page.evaluate(() => JSON.stringify((window as any).__editor.branch)));
+/** Edits land in the design branch's worktree, not in the opened checkout. */
+const wt: string = await page.evaluate(() => (window as any).__editor.worktree);
 log('opened project, waiting for dev server');
 await page.waitForFunction(() => (window as any).__editor.devServer?.status === 'ready', null, { timeout: 90_000 });
 await page.waitForFunction(() => (window as any).__editor.frameReady.desktop === true, null, { timeout: 30_000 });
@@ -148,7 +154,7 @@ await page.evaluate(async (path) => {
 await page.waitForTimeout(400);
 await shot('05-nav-selected');
 
-const layout = join(project, 'src/routes/(app)/+layout.svelte');
+const layout = join(wt, 'src/routes/(app)/+layout.svelte');
 const before = readFileSync(layout, 'utf8');
 const gapField = page.locator('input[aria-label="Gap"]');
 const box = await gapField.boundingBox();
@@ -166,7 +172,7 @@ await shot('06-gap-changed');
 // Wrap two cards in a Stack with S.
 await page.evaluate(() => (window as any).__editor.goTo('/'));
 await page.waitForTimeout(2000);
-const page1 = join(project, 'src/routes/(app)/+page.svelte');
+const page1 = join(wt, 'src/routes/(app)/+page.svelte');
 const beforePage = readFileSync(page1, 'utf8');
 await page.evaluate(async () => {
 	const e = (window as any).__editor;
@@ -232,7 +238,7 @@ const parity = await page.evaluate(async () => {
 log('parity', JSON.stringify(parity));
 
 // Phone edit through the Style panel: Framer cascade → base for Phone, md: pin for larger frames.
-const pagePath = join(project, 'src/routes/(app)/+page.svelte');
+const pagePath = join(wt, 'src/routes/(app)/+page.svelte');
 const pageBefore = readFileSync(pagePath, 'utf8');
 await page.evaluate(async () => {
 	const e = (window as any).__editor;
@@ -285,5 +291,9 @@ await page2.waitForFunction(() => (window as any).__editor.frameReady.desktop ==
 await page2.waitForTimeout(1500);
 const restartedUrl = await page2.evaluate(() => (document.querySelector('webview') as any).getURL());
 log('after restart, desktop frame at', restartedUrl, '→ still logged in:', !restartedUrl.includes('/login'));
+log('reopened the same design branch:', (await page2.evaluate(() => (window as any).__editor.worktree)) === wt);
 await app2.close();
+// The design worktree lives outside the temp dir (~/.codesigner/worktrees): remove it.
+execSync(`git worktree remove --force ${JSON.stringify(wt)}`, { cwd: project });
+rmSync(dirname(wt), { recursive: true, force: true });
 log('screenshots in', shots);

@@ -447,7 +447,7 @@ export function bridgeMain(config: BridgeConfig) {
 		const text = (el.innerText ?? '').replace(/\n+$/, '');
 		if (cancel) el.textContent = original;
 		getSelection()?.removeAllRanges();
-		send({ type: 'text-edited', id, text: cancel ? original : text, cancelled: cancel || text === original });
+		send({ type: 'text-edited', id, text: cancel ? original : text, original, cancelled: cancel || text === original });
 	};
 	function onEditKey(event: KeyboardEvent) {
 		event.stopPropagation(); // keep the app's own shortcuts out of the way while typing
@@ -693,6 +693,11 @@ export function bridgeMain(config: BridgeConfig) {
 			case 'end-edit-text':
 				finishEdit(msg.cancel);
 				break;
+			case 'set-text': {
+				const el = recFor(msg.id)?.els[0] ?? elFor(msg.id);
+				if (el) el.textContent = msg.text;
+				break;
+			}
 		}
 	});
 
