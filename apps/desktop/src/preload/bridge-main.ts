@@ -336,6 +336,8 @@ export function bridgeMain(config: BridgeConfig) {
 			opacity: cs.opacity,
 			overflow: cs.overflow,
 			boxShadow: cs.boxShadow,
+			filter: cs.filter,
+			backdropFilter: cs.backdropFilter,
 			fontFamily: cs.fontFamily,
 			fontSize: cs.fontSize,
 			fontWeight: cs.fontWeight,

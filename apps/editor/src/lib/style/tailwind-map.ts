@@ -55,7 +55,9 @@ export type Family =
 	| 'fontWeight'
 	| 'textColor'
 	| 'textAlign'
-	| 'shadow';
+	| 'shadow'
+	| 'blur'
+	| 'backdropBlur';
 
 const BG_NON_COLOR = /^bg-(clip|origin|fixed|local|scroll|repeat|no-repeat|cover|contain|auto|center|top|bottom|left|right|linear|radial|conic|gradient|none|blend|size|position)/;
 const TEXT_SIZE = /^text-(xs|sm|base|lg|xl|[2-9]xl|\[\d)/;
@@ -88,8 +90,29 @@ const FAMILIES: Record<Family, (utility: string) => boolean> = {
 	fontWeight: (u) => /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[\d)/.test(u),
 	textColor: (u) => u.startsWith('text-') && !TEXT_SIZE.test(u) && !TEXT_ALIGN.test(u) && !/^text-(wrap|nowrap|balance|pretty|ellipsis|clip)$/.test(u),
 	textAlign: (u) => TEXT_ALIGN.test(u),
-	shadow: (u) => /^shadow(-|$)/.test(u)
+	// Sizes only: `shadow-black/20` is the shadow's color, a separate family.
+	shadow: (u) => /^shadow(-(2xs|xs|sm|md|lg|xl|2xl|none|\[.+\]))?$/.test(u),
+	blur: (u) => /^blur(-(none|xs|sm|md|lg|xl|2xl|3xl|\[.+\]))?$/.test(u),
+	backdropBlur: (u) => /^backdrop-blur(-(none|xs|sm|md|lg|xl|2xl|3xl|\[.+\]))?$/.test(u)
 };
+
+/**
+ * Whether a computed box-shadow casts a shadow: Tailwind v4 composes rings
+ * (`0 0 0 1px`) and transparent placeholders into the same property.
+ */
+export function castsShadow(boxShadow: string): boolean {
+	if (!boxShadow || boxShadow === 'none') return false;
+	const layers = boxShadow.split(/,(?![^(]*\))/);
+	return layers.some((layer) => {
+		if (/rgba\([^)]*,\s*0\)|transparent/.test(layer)) return false;
+		const [x = 0, y = 0, blur = 0] = (layer.replace(/\([^)]*\)/g, '').match(/-?[\d.]+px/g) ?? []).map(parseFloat);
+		return x !== 0 || y !== 0 || blur !== 0;
+	});
+}
+
+/** Shadow and blur presets (Tailwind v4 scales), smallest first. */
+export const SHADOWS = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl'] as const;
+export const BLURS = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'] as const;
 
 export const tokensOf = (className: string) => className.split(/\s+/).filter(Boolean);
 

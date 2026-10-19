@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { activePrefix, coveredPaddingUtilities, familyTokens, paddingSides, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
+import { activePrefix, castsShadow, coveredPaddingUtilities, familyTokens, paddingSides, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
 
 describe('tailwind map', () => {
 	test('parses variant prefixes', () => {
@@ -99,5 +99,15 @@ describe('coveredPaddingUtilities', () => {
 	});
 	test('pairs collapse when equal', () => {
 		expect(coveredPaddingUtilities({ ...values, left: 24 }, paddingSides(['px-6']))).toEqual(['px-6']);
+	});
+});
+
+describe('castsShadow', () => {
+	test('a ring or transparent placeholders are not a shadow', () => {
+		expect(castsShadow('rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.145 0 0 / 0.1) 0px 0px 0px 1px')).toBe(false);
+		expect(castsShadow('none')).toBe(false);
+	});
+	test('an offset or blurred layer is', () => {
+		expect(castsShadow('rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.1) 0px 1px 2px -1px')).toBe(true);
 	});
 });

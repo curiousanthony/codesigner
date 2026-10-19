@@ -66,6 +66,8 @@ export interface ComputedSnapshot {
 	opacity: string;
 	overflow: string;
 	boxShadow: string;
+	filter: string;
+	backdropFilter: string;
 	fontFamily: string;
 	fontSize: string;
 	fontWeight: string;

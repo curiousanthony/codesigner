@@ -42,6 +42,9 @@
 		coveredPaddingUtilities,
 		DEFAULT_BREAKPOINTS,
 		setFamily,
+		SHADOWS,
+		BLURS,
+		castsShadow,
 		sizeClasses,
 		sizeMode,
 		spacing,
@@ -315,6 +318,24 @@
 		{ value: 'scroll', label: m.overflow_scroll() }
 	]);
 	const overflowValue = $derived((c?.overflow ?? 'visible').split(' ')[0]);
+
+	// ----------------------------------------------------------- effects
+	const SHADOW_OPTIONS = $derived([{ value: 'none', label: m.effect_none() }, ...SHADOWS.map((v) => ({ value: v, label: v.toUpperCase() }))]);
+	const BLUR_OPTIONS = $derived([{ value: 'none', label: m.effect_none() }, ...BLURS.map((v) => ({ value: v, label: v.toUpperCase() }))]);
+	/** The preset a family's class names (`shadow-md` → md), `none`, or null for custom / inherited values. */
+	function presetOf(family: Family, utility: string, computed: string): string | null {
+		const token = familyTokens(cls, family, prefixFor(family))[0];
+		if (!token) return computed === 'none' || computed === '' ? 'none' : null;
+		const u = parseToken(token).utility;
+		if (u === utility) return family === 'shadow' ? 'sm' : 'md'; // bare `shadow` / `blur`
+		return u.startsWith(`${utility}-`) && !u.includes('[') ? u.slice(utility.length + 1) : null;
+	}
+	/** `none` removes the class, or writes `-none` when the look comes from elsewhere (a component's base classes). */
+	function effectEdit(family: Family, utility: string, value: string, computed: string): ClassEdit {
+		if (value !== 'none') return set(family, [`${utility}-${value}`]);
+		const own = familyTokens(cls, family, prefixFor(family)).length > 0;
+		return set(family, own || computed === 'none' || computed === '' ? [] : [`${utility}-none`]);
+	}
 
 	const POSITIONS = $derived([
 		{ value: 'static', label: m.position_static() },
@@ -717,6 +738,22 @@
 					label={m.label_border_color()}
 					onchange={(choice) => apply(m.edit_border(), mergeEdits(set('borderColor', [colorUtility('border', choice)]), px(c.borderWidth) === 0 ? set('borderWidth', ['border']) : { remove: [], add: [] }))}
 				/>
+			</Row>
+		</Section>
+
+		<!-- Effects -->
+		<Section title={m.section_effects()}>
+			<Row label={m.label_shadow()} overridden={overridden('shadow')}>
+				<SelectField options={SHADOW_OPTIONS} value={presetOf('shadow', 'shadow', castsShadow(c.boxShadow) ? c.boxShadow : 'none')} placeholder={m.effect_custom()}
+					onchange={(v) => apply(m.edit_shadow(), effectEdit('shadow', 'shadow', v, castsShadow(c.boxShadow) ? c.boxShadow : 'none'))} />
+			</Row>
+			<Row label={m.label_blur()} overridden={overridden('blur')}>
+				<SelectField options={BLUR_OPTIONS} value={presetOf('blur', 'blur', c.filter)} placeholder={m.effect_custom()}
+					onchange={(v) => apply(m.edit_blur(), effectEdit('blur', 'blur', v, c.filter))} />
+			</Row>
+			<Row label={m.label_backdrop_blur()} overridden={overridden('backdropBlur')}>
+				<SelectField options={BLUR_OPTIONS} value={presetOf('backdropBlur', 'backdrop-blur', c.backdropFilter)} placeholder={m.effect_custom()}
+					onchange={(v) => apply(m.edit_blur(), effectEdit('backdropBlur', 'backdrop-blur', v, c.backdropFilter))} />
 			</Row>
 		</Section>
 
