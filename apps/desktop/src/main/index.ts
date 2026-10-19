@@ -17,6 +17,7 @@ import {
 	listBranches,
 	listSourceBranches,
 	removeIsolationRoute,
+	scanImages,
 	scanRoutes
 } from '@codesigner/engine';
 import { EDITOR_APP_URL, EDITOR_DEV_URL, appVersion, isDev, preloadPath } from './env.js';
@@ -109,6 +110,7 @@ function registerHandlers() {
 	handle('project:open', (root) => openProject(root));
 	handle('project:update-settings', (root, patch) => updateProjectSettings(root, patch));
 	handle('project:routes', (worktree) => scanRoutes(worktree));
+	handle('project:images', (worktree) => scanImages(worktree));
 	handle('project:reveal', (path) => revealPath(path));
 	handle('project:open-in-editor', (file, line, column) => openInEditor(file, line, column));
 	handle('canvas:remove-isolation', (worktree) => {

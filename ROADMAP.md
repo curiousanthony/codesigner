@@ -49,7 +49,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 ## M2 — Full design surface 🚧
 
 - ✅ Draw tools like Framer: `S` Stack, `F` Frame, `⇧G` Grid, `T` Text (also in the `+` menu). Click or drag inside a container; an insertion line follows its flow (row, column, grid), `{#each}` runs are kept intact, empty layout space draws into the page. Drawn sizes snap to the 4px scale; drawn frames get a fill that contrasts in light and dark. `⇧A` wraps the selection in a Stack (smoke-tested; tried on the real SaaS)
-- ⬜ Insert: Image; shadcn components from Assets
+- ✅ Insert from Assets: drag a component (its import is added: named, `* as Card` or default) or an image (static/ by URL, `src/lib/assets` imported) onto the canvas
 - ✅ Text editing on canvas: double-click a selected text layer (or draw one with `T`), type, `↩` commits, `Esc` cancels
 - ⬜ Rich text (inline `<strong>`/links), typography presets
 - ✅ Drag to reorder on the canvas (ghost + insertion line) and in the Layers panel (before / after / inside); delete, duplicate (`⌘D`), copy/paste style (`⌥⌘C` / `⌥⌘V`)
@@ -69,7 +69,8 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 
 ## M3 — Components & tokens 🚧
 
-- ⬜ Assets panel: components (grouped, e.g. `ui/`), color tokens, typography tokens, images in `static/` and `src/lib/assets`
+- ✅ Assets panel: components (grouped, e.g. `ui/`), color tokens (light/dark), images in `static/` and `src/lib/assets` with thumbnails; all draggable onto the canvas
+- ⬜ Assets: typography tokens
 - ⬜ Design tokens editor: light/dark values from `:root` / `.dark` / `@theme`, alias chains, add a token
 - ⬜ Component instance panel: props from `$props()` and variants from `tv()` (Variant dropdown, Text, Boolean, Icon…)
 - ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`

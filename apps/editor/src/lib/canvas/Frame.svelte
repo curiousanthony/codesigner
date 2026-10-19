@@ -3,7 +3,7 @@
 	import type { Breakpoint, DropTarget, GuestToHost, NodeId, Rect } from '@codesigner/protocol';
 	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
 	import { editor, isDrawTool } from '#lib/state/editor.svelte.js';
-	import { drawLayer, insertComponent, moveLayer } from '#lib/state/commands.js';
+	import { drawLayer, insertComponent, insertImage, moveLayer } from '#lib/state/commands.js';
 	import { invoke } from '#lib/api.js';
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
@@ -333,7 +333,7 @@
 
 	// ------------------------------------------ components from Assets
 	function ondragover(event: DragEvent) {
-		if (!editor.draggingComponent || isComponentCanvas) return;
+		if (!editor.draggingAsset || isComponentCanvas) return;
 		event.preventDefault();
 		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
 		const p = toGuest(event);
@@ -344,22 +344,23 @@
 	async function previewComponentDrop(x: number, y: number) {
 		const seq = ++componentDropSeq;
 		const target = (await client?.dropTarget(x, y)) ?? null;
-		if (seq === componentDropSeq && editor.draggingComponent) componentDrop = target;
+		if (seq === componentDropSeq && editor.draggingAsset) componentDrop = target;
 	}
 	async function ondrop(event: DragEvent) {
-		const component = editor.draggingComponent;
-		editor.draggingComponent = null;
+		const asset = editor.draggingAsset;
+		editor.draggingAsset = null;
 		componentDropSeq++;
 		componentDrop = null;
-		if (!component || !client) return;
+		if (!asset || !client) return;
 		event.preventDefault();
 		const p = toGuest(event);
 		const target = await client.dropTarget(p.x, p.y);
 		if (!target) return void editor.toast(m.draw_no_container());
-		void insertComponent(component, frameId, target);
+		if ('component' in asset) void insertComponent(asset.component, frameId, target);
+		else void insertImage(asset.image, frameId, target);
 	}
 	$effect(() => {
-		if (!editor.draggingComponent) componentDrop = null;
+		if (!editor.draggingAsset) componentDrop = null;
 	});
 
 	function onwheel(event: WheelEvent) {
@@ -601,7 +602,7 @@
 		<div
 			bind:this={gesture}
 			class="absolute inset-0 z-10"
-			style="pointer-events:{designMode || drawing || editor.draggingComponent ? 'auto' : 'none'}; cursor:{drawing ? 'crosshair' : designMode ? 'default' : 'auto'}"
+			style="pointer-events:{designMode || drawing || editor.draggingAsset ? 'auto' : 'none'}; cursor:{drawing ? 'crosshair' : designMode ? 'default' : 'auto'}"
 			role="presentation"
 			{ondragover}
 			{ondrop}

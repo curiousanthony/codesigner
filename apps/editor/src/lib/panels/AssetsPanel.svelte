@@ -6,7 +6,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 
 	let query = $state('');
-	let open = $state<Record<string, boolean>>({ components: true, colors: true });
+	let open = $state<Record<string, boolean>>({ components: true, images: true, colors: true });
 	let editing = $state<{ name: string; scope: 'light' | 'dark' } | null>(null);
 	let draft = $state('');
 	let expandedToken = $state<string | null>(null);
@@ -20,6 +20,11 @@
 		}
 		return [...map.entries()];
 	});
+
+	const images = $derived(editor.images.filter((i) => !q || i.file.toLowerCase().includes(q)));
+	/** Thumbnails come from the app's own dev server (static/ at its URL, $lib/assets through Vite). */
+	const thumb = (image: (typeof editor.images)[number]) =>
+		editor.devServer?.url ? new URL(image.kind === 'static' ? image.src : `/${image.file}`, editor.devServer.url).toString() : '';
 
 	const colorTokens = $derived(
 		(editor.tokens?.tokens ?? []).filter(
@@ -120,11 +125,11 @@
 						draggable="true"
 						data-component={component.name}
 						ondragstart={(e) => {
-							editor.draggingComponent = component;
+							editor.draggingAsset = { component };
 							e.dataTransfer?.setData('text/plain', component.name);
 							if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
 						}}
-						ondragend={() => (editor.draggingComponent = null)}
+						ondragend={() => (editor.draggingAsset = null)}
 					>
 						<Component class="size-3.5 shrink-0 text-component" strokeWidth={1.75} />
 						<span class="min-w-0 flex-1 truncate">{component.name}</span>
@@ -136,6 +141,36 @@
 			{:else}
 				<p class="px-2 py-2 text-muted">{m.assets_no_components()}</p>
 			{/each}
+		{/if}
+
+		{@render header('images', m.assets_images(), images.length)}
+		{#if open.images}
+			{#if images.length}
+				<div class="grid grid-cols-3 gap-1.5 px-1 pb-2">
+					{#each images as image (image.file)}
+						<div
+							class="flex cursor-grab flex-col gap-1 rounded-control p-1 hover:bg-row-hover"
+							title={m.assets_drag_hint({ path: image.file })}
+							role="listitem"
+							draggable="true"
+							data-image={image.file}
+							ondragstart={(e) => {
+								editor.draggingAsset = { image };
+								e.dataTransfer?.setData('text/plain', image.src);
+								if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+							}}
+							ondragend={() => (editor.draggingAsset = null)}
+						>
+							<span class="flex aspect-square items-center justify-center overflow-hidden rounded-[6px] bg-control">
+								{#if thumb(image)}<img src={thumb(image)} alt="" class="max-h-full max-w-full object-contain" draggable="false" loading="lazy" />{/if}
+							</span>
+							<span class="truncate text-[10px] text-label">{image.name}</span>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<p class="px-2 py-2 text-muted">{m.assets_no_images()}</p>
+			{/if}
 		{/if}
 
 		{@render header('colors', m.assets_colors(), colorTokens.length)}

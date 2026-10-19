@@ -12,3 +12,4 @@ export { EditError } from './svelte/structure.js';
 export * from './isolation.js';
 export { findTv } from './svelte/variants.js';
 export * from './versions.js';
+export * from './images.js';

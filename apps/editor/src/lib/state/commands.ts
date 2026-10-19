@@ -1,4 +1,4 @@
-import type { ComponentInfo, DropTarget, ImportSpec, SourceLoc } from '@codesigner/protocol';
+import type { ComponentInfo, DropTarget, ImageAsset, ImportSpec, SourceLoc } from '@codesigner/protocol';
 import { editor, type DrawTool } from './editor.svelte.js';
 import { spacing } from '#lib/style/tailwind-map.js';
 import { invoke } from '#lib/api.js';
@@ -159,6 +159,28 @@ export async function insertComponent(component: ComponentInfo, frameId: string,
 	]);
 	const loc = result?.created?.[0];
 	if (loc) pendingSelect({ ...loc, tag: component.name }, frameId);
+}
+
+/** `logo-dark.svg` → `logoDarkUrl`, the binding a $lib image is imported as. */
+const imageBinding = (name: string) =>
+	name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase()).replace(/^[^a-zA-Z_]+/, '') + 'Url';
+
+/** Drops an image from Assets: static files by URL, $lib/assets ones imported (Vite fingerprints them). */
+export async function insertImage(image: ImageAsset, frameId: string, target: DropTarget) {
+	const binding = imageBinding(image.name);
+	const src = image.kind === 'static' ? `src="${image.src}"` : `src={${binding}}`;
+	const result = await editor.editWithResult(m.edit_insert({ kind: 'image' }), [
+		{
+			type: 'insert',
+			parent: target.parent,
+			index: -1,
+			markup: `<img ${src} alt="" class="h-auto w-48" />`,
+			anchor: target.anchor ?? undefined,
+			imports: image.kind === 'lib' ? [{ kind: 'default', local: binding, from: image.src }] : []
+		}
+	]);
+	const loc = result?.created?.[0];
+	if (loc) pendingSelect({ ...loc, tag: 'img' }, frameId);
 }
 
 export async function unwrapSelection() {

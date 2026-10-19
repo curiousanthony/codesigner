@@ -50,3 +50,12 @@ export type InstancePropValue =
 	| { kind: 'boolean'; value: boolean }
 	| { kind: 'expression'; source: string }
 	| { kind: 'spread'; source: string };
+
+/** An image in static/ (served as `src`) or src/lib/assets (`src` is the import specifier). */
+export interface ImageAsset {
+	name: string;
+	/** Relative to the working copy. */
+	file: string;
+	kind: 'static' | 'lib';
+	src: string;
+}

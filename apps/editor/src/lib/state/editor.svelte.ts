@@ -3,6 +3,7 @@ import type {
 	Breakpoint,
 	CanvasMode,
 	ComponentInfo,
+	ImageAsset,
 	DesignBranch,
 	DesignTokens,
 	DevServerLog,
@@ -102,6 +103,7 @@ class EditorState {
 
 	routes = $state<RouteInfo[]>([]);
 	components = $state<ComponentInfo[]>([]);
+	images = $state<ImageAsset[]>([]);
 	tokens = $state<DesignTokens | null>(null);
 	currentPath = $state('/');
 	currentTitle = $state('');
@@ -110,8 +112,8 @@ class EditorState {
 	rightTab = $state<RightTab>('style');
 	tool = $state<Tool>('select');
 	spaceHeld = $state(false);
-	/** A component being dragged from the Assets panel onto the canvas. */
-	draggingComponent = $state<ComponentInfo | null>(null);
+	/** A component or image being dragged from the Assets panel onto the canvas. */
+	draggingAsset = $state<{ component: ComponentInfo } | { image: ImageAsset } | null>(null);
 	/** ⌥ held: measure from the selection to the hovered layer. */
 	altHeld = $state(false);
 	mode = $state<CanvasMode>('design');
@@ -540,6 +542,7 @@ class EditorState {
 		} catch {
 			this.components = [];
 		}
+		this.images = await invoke('project:images', this.worktree).catch(() => []);
 	}
 
 	async refreshRoutes() {
