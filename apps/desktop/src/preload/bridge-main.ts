@@ -481,11 +481,15 @@ export function bridgeMain(config: BridgeConfig) {
 	const visible = (el: Element) => (el as HTMLElement).offsetParent !== null || getComputedStyle(el).position === 'fixed';
 
 	/** The container under a point and where a new child would go, following its flow (row, column or grid). */
-	const dropTarget = (x: number, y: number): DropTarget | null => {
+	const dropTarget = (x: number, y: number, exclude?: NodeId): DropTarget | null => {
 		const path = pathAt(x, y);
+		const dragged = exclude ? recFor(exclude) : null;
+		// A dragged layer can't go inside itself, and moves stay within its file.
+		const within = (rec: LayerRec) => !!dragged && dragged.els.some((d) => rec.els.some((e) => d === e || d.contains(e)));
 		for (let i = path.length - 1; i >= 0; i--) {
 			let rec = recFor(path[i]);
-			if (!rec) continue;
+			if (!rec || within(rec)) continue;
+			if (dragged && rec.layer.loc.file !== dragged.layer.loc.file && !/\+layout\.svelte$/.test(rec.layer.loc.file)) continue;
 			// Empty space of a layout around the page: draw into the page, not into every page of the layout.
 			if (/\+layout\.svelte$/.test(rec.layer.loc.file)) {
 				const pages = rec.children.filter((c) => /\+page\.svelte$/.test(c.layer.loc.file) && c.layer.kind === 'element');
@@ -493,7 +497,8 @@ export function bridgeMain(config: BridgeConfig) {
 			}
 			const el = rec.els[0];
 			const file = rec.layer.loc.file;
-			const kids = rec.children.filter((c) => c.layer.loc.file === file && c.els.some(visible));
+			if (dragged && file !== dragged.layer.loc.file) continue;
+			const kids = rec.children.filter((c) => c !== dragged && c.layer.loc.file === file && c.els.some(visible));
 			// A component usage only takes children when it already renders markup from this file (a snippet).
 			if (rec.layer.kind === 'instance' ? kids.length === 0 : LEAF.test(el.localName)) continue;
 			const cs = getComputedStyle(el);
@@ -651,7 +656,7 @@ export function bridgeMain(config: BridgeConfig) {
 				send({ type: 'hit-result', reqId: msg.reqId, path: pathAt(msg.x, msg.y) });
 				break;
 			case 'drop-target':
-				send({ type: 'drop-result', reqId: msg.reqId, target: dropTarget(msg.x, msg.y) });
+				send({ type: 'drop-result', reqId: msg.reqId, target: dropTarget(msg.x, msg.y, msg.exclude) });
 				break;
 			case 'describe':
 				send({

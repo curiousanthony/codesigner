@@ -37,7 +37,14 @@ export type EditOp =
 	  }
 	| { type: 'remove'; targets: SourceLoc[] }
 	| { type: 'duplicate'; targets: SourceLoc[] }
-	| { type: 'move'; target: SourceLoc; parent: SourceLoc; index: number }
+	| {
+			type: 'move';
+			target: SourceLoc;
+			parent: SourceLoc;
+			index: number;
+			/** Move next to this sibling instead (as for `insert`); wins over `index`. */
+			anchor?: { target: SourceLoc; position: 'before' | 'after' };
+	  }
 	| { type: 'rename-tag'; target: SourceLoc; tag: string }
 	| {
 			/** Classes of one variant combination of a tv() component (edits that variant's own entry). */
@@ -69,7 +76,7 @@ export interface EditResult {
 	changes: FileChange[];
 	/** Where each target ended up after the edit, keyed by the input loc "file:line:column". */
 	relocated?: Record<string, SourceLoc>;
-	/** Opening tag of each layer created by `insert` ops, in order. */
+	/** Opening tag of each layer created by `insert` ops (and moved by `move` ops), in order. */
 	created?: SourceLoc[];
 	error?: string;
 	warnings?: string[];

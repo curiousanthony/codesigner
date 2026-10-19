@@ -78,6 +78,21 @@ export async function drawLayer(kind: DrawTool, frameId: string, target: DropTar
 	if (loc) pendingSelect({ ...loc, tag: kind === 'text' ? 'p' : 'div' }, frameId, kind === 'text' ? (id) => void editor.startTextEdit(frameId, id) : undefined);
 }
 
+/**
+ * Drag to reorder (canvas or Layers panel): moves a layer next to the target's
+ * anchor, or to the end of an empty/target container. Defaults to the selection.
+ */
+export async function moveLayer(frameId: string, target: Pick<DropTarget, 'parent' | 'anchor'>, source?: SourceLoc) {
+	const info = editor.selected;
+	const from = source ?? (info?.loc && info.editable ? { ...info.loc, tag: info.componentTag ?? info.tag } : null);
+	if (!from) return;
+	const result = await editor.editWithResult(m.edit_move(), [
+		{ type: 'move', target: from, parent: target.parent, index: -1, anchor: target.anchor ?? undefined }
+	]);
+	const loc = result?.changes.length ? result.created?.[0] : null;
+	if (loc) pendingSelect({ ...loc, tag: from.tag }, frameId);
+}
+
 export async function unwrapSelection() {
 	const info = editor.selected;
 	if (!info?.loc || info.kind !== 'element') return;

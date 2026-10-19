@@ -89,8 +89,8 @@ export class BridgeClient {
 		this.webview.focus();
 	}
 
-	async dropTarget(x: number, y: number): Promise<DropTarget | null> {
-		const reply = await this.request<Extract<GuestToHost, { type: 'drop-result' }>>({ type: 'drop-target', x, y }, 800);
+	async dropTarget(x: number, y: number, exclude?: NodeId): Promise<DropTarget | null> {
+		const reply = await this.request<Extract<GuestToHost, { type: 'drop-result' }>>({ type: 'drop-target', x, y, exclude }, 800);
 		return reply?.target ?? null;
 	}
 

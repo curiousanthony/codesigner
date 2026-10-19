@@ -158,7 +158,8 @@ export interface DropTarget {
 export type HostToGuest =
 	| { type: 'init'; frameId: string; scope: string[]; mode: CanvasMode }
 	| { type: 'hit'; reqId: number; x: number; y: number }
-	| { type: 'drop-target'; reqId: number; x: number; y: number }
+	/** `exclude`: a layer being dragged (not a target, not a sibling to place around; containers must be in its file). */
+	| { type: 'drop-target'; reqId: number; x: number; y: number; exclude?: NodeId }
 	| { type: 'describe'; reqId: number; ids: NodeId[] }
 	| { type: 'find-loc'; reqId: number; loc: SourceLoc }
 	| { type: 'highlight'; hover: NodeId | null; selected: NodeId[] }

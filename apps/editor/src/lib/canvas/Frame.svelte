@@ -3,7 +3,7 @@
 	import type { Breakpoint, DropTarget, GuestToHost, NodeId, Rect } from '@codesigner/protocol';
 	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
 	import { editor, isDrawTool } from '#lib/state/editor.svelte.js';
-	import { drawLayer } from '#lib/state/commands.js';
+	import { drawLayer, moveLayer } from '#lib/state/commands.js';
 	import { invoke } from '#lib/api.js';
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
@@ -177,6 +177,7 @@
 	let hoverSeq = 0;
 	let lastHit: NodeId[] = [];
 	async function onpointermove(event: PointerEvent) {
+		if (dragArm) return void dragMove(event);
 		if (drawing) {
 			const p = toGuest(event);
 			if (drawStart) {
@@ -241,7 +242,56 @@
 		if (seq === dropSeq && drawing) dropPreview = target;
 	}
 
+	// ---------------------------------------------------- drag to reorder
+	/** Armed on pointerdown inside the selected layer; becomes a drag after a few pixels. */
+	let dragArm: { id: NodeId; start: { x: number; y: number }; rect: Rect } | null = null;
+	let dragging = $state<{ id: NodeId; rect: Rect; dx: number; dy: number } | null>(null);
+	let dragTarget = $state<DropTarget | null>(null);
+
+	function armDrag(event: PointerEvent): boolean {
+		const info = editor.selected;
+		if (!designMode || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || editor.textEditing) return false;
+		if (editor.selection.frameId !== frameId || editor.selection.ids.length !== 1 || !info?.loc || !info.editable) return false;
+		const rect = selectedRects[info.id];
+		const p = toGuest(event);
+		if (!rect || p.x < rect.x || p.y < rect.y || p.x > rect.x + rect.width || p.y > rect.y + rect.height) return false;
+		dragArm = { id: info.id, start: p, rect };
+		gesture.setPointerCapture(event.pointerId);
+		return true;
+	}
+
+	let dragSeq = 0;
+	async function dragMove(event: PointerEvent) {
+		if (!dragArm || !client) return;
+		const p = toGuest(event);
+		const dx = p.x - dragArm.start.x;
+		const dy = p.y - dragArm.start.y;
+		if (!dragging && Math.hypot(dx, dy) * scale < 4) return;
+		dragging = { id: dragArm.id, rect: dragArm.rect, dx, dy };
+		editor.setHover(frameId, null);
+		const seq = ++dragSeq;
+		const target = await client.dropTarget(p.x, p.y, dragArm.id);
+		if (seq === dragSeq && dragging) dragTarget = target;
+	}
+
+	async function dragEnd(event: PointerEvent) {
+		const wasDragging = !!dragging;
+		const arm = dragArm;
+		dragArm = null;
+		dragging = null;
+		dragSeq++;
+		const target = dragTarget;
+		dragTarget = null;
+		if (!wasDragging || !arm || !client) return;
+		suppressClick = true;
+		setTimeout(() => (suppressClick = false), 0);
+		const p = toGuest(event);
+		const final = (await client.dropTarget(p.x, p.y, arm.id)) ?? target;
+		if (final) void moveLayer(frameId, final);
+	}
+
 	function onpointerdown(event: PointerEvent) {
+		if (armDrag(event)) return;
 		if (!drawing || event.button !== 0) return;
 		event.preventDefault();
 		gesture.setPointerCapture(event.pointerId);
@@ -251,6 +301,7 @@
 	}
 
 	async function onpointerup(event: PointerEvent) {
+		if (dragArm) return void dragEnd(event);
 		if (!drawing || !drawStart || !client) return;
 		const start = drawStart;
 		const box = drawBox;
@@ -457,6 +508,19 @@
 					{@const vertical = l.height > l.width}
 					<div class="absolute bg-accent" style="left:{l.x}px; top:{l.y}px; width:{vertical ? 'calc(2px * var(--inv))' : l.width + 'px'}; height:{vertical ? l.height + 'px' : 'calc(2px * var(--inv))'};"></div>
 				{/if}
+			{/if}
+			{#if dragging}
+				{@const g = dragging.rect}
+				{#if dragTarget}
+					{@const p = dragTarget.parentRect}
+					<div class="absolute" style="left:{p.x}px; top:{p.y}px; width:{p.width}px; height:{p.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent);"></div>
+					{#if dragTarget.line}
+						{@const l = dragTarget.line}
+						{@const vertical = l.height > l.width}
+						<div class="absolute bg-accent" style="left:{l.x}px; top:{l.y}px; width:{vertical ? 'calc(2px * var(--inv))' : l.width + 'px'}; height:{vertical ? l.height + 'px' : 'calc(2px * var(--inv))'};"></div>
+					{/if}
+				{/if}
+				<div class="absolute opacity-80" style="left:{g.x + dragging.dx}px; top:{g.y + dragging.dy}px; width:{g.width}px; height:{g.height}px; box-shadow: inset 0 0 0 calc(1.5px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);"></div>
 			{/if}
 			{#if drawBox && (drawBox.width > 2 || drawBox.height > 2)}
 				<div class="absolute" style="left:{drawBox.x}px; top:{drawBox.y}px; width:{drawBox.width}px; height:{drawBox.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);">

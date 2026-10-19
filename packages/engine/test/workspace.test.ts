@@ -128,6 +128,28 @@ describe('structure', () => {
 		ws.undo();
 	});
 
+	test('moves a layer next to an anchor sibling (drag to reorder)', async () => {
+		const page = 'src/routes/test/reorder.svelte';
+		const { writeFileSync } = await import('node:fs');
+		writeFileSync(join(project.dir, page), '<div class="flex flex-col">\n\t<p>A</p>\n\t<p>B</p>\n\t<p>C</p>\n\t<section class="flex">\n\t\t<i>x</i>\n\t</section>\n</div>\n');
+		const text = () => readFileSync(join(project.dir, page), 'utf8');
+		const loc = (needle: string) => locOf(text(), needle, page);
+		// Down: A after C. The slot right after A's old place must not be used as the anchor.
+		let result = await ws.apply({ label: 'move', ops: [{ type: 'move', target: loc('<p>A'), parent: loc('<div'), index: -1, anchor: { target: loc('<p>C'), position: 'after' } }] });
+		expect(text()).toContain('\t<p>B</p>\n\t<p>C</p>\n\t<p>A</p>\n');
+		expect(result.created).toEqual([loc('<p>A')]);
+		// Up: A before B.
+		await ws.apply({ label: 'move', ops: [{ type: 'move', target: loc('<p>A'), parent: loc('<div'), index: -1, anchor: { target: loc('<p>B'), position: 'before' } }] });
+		expect(text()).toContain('\t<p>A</p>\n\t<p>B</p>\n\t<p>C</p>\n');
+		// Before the sibling that follows it: no-op position.
+		await ws.apply({ label: 'move', ops: [{ type: 'move', target: loc('<p>A'), parent: loc('<div'), index: -1, anchor: { target: loc('<p>B'), position: 'before' } }] });
+		expect(text()).toContain('\t<p>A</p>\n\t<p>B</p>\n\t<p>C</p>\n');
+		// Into another stack, re-indented.
+		result = await ws.apply({ label: 'move', ops: [{ type: 'move', target: loc('<p>B'), parent: loc('<section'), index: -1, anchor: { target: loc('<i>'), position: 'before' } }] });
+		expect(text()).toContain('<section class="flex">\n\t\t<p>B</p>\n\t\t<i>x</i>');
+		expect(result.created).toEqual([loc('<p>B')]);
+	});
+
 	test('reports where a drawn layer landed next to look-alike siblings', async () => {
 		const page = 'src/routes/test/look-alike.svelte';
 		const { writeFileSync } = await import('node:fs');

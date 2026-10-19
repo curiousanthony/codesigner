@@ -1,8 +1,9 @@
 <script lang="ts">
-	import type { Breakpoint, LayerNode } from '@codesigner/protocol';
+	import type { Breakpoint, LayerNode, SourceLoc } from '@codesigner/protocol';
 	import { ChevronRight, Code, Layers, Monitor, Search, Smartphone, Tablet } from '@lucide/svelte';
 	import { editor } from '#lib/state/editor.svelte.js';
 	import { invoke } from '#lib/api.js';
+	import { moveLayer } from '#lib/state/commands.js';
 	import { breakpointLabel } from '#lib/canvas/breakpoints.js';
 	import LayerIcon from './LayerIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -86,6 +87,57 @@
 		void invoke('project:open-in-editor', `${editor.worktree}/${node.loc.file}`, node.loc.line, node.loc.column);
 	}
 
+	// ------------------------------------------------- drag to reorder
+	type LayerRow = Extract<Row, { type: 'layer' }>;
+	type Zone = 'before' | 'after' | 'inside';
+	let dragRow = $state<LayerRow | null>(null);
+	let dropHint = $state<{ key: string; zone: Zone } | null>(null);
+
+	const CONTAINERS = new Set(['stack-h', 'stack-v', 'grid', 'frame']);
+	/** Can take a dropped child: a container element, or a component usage that renders markup from this file. */
+	const takesChildren = (node: LayerNode) =>
+		node.isInstance ? node.children.some((c) => c.loc?.file === node.loc?.file) : CONTAINERS.has(node.kind);
+
+	/** Where a drop on `row` would go, or null when it's not allowed (other file, inside itself, no source). */
+	function dropFor(row: LayerRow, zone: Zone): { parent: SourceLoc; anchor: { target: SourceLoc; position: 'before' | 'after' } | null } | null {
+		const from = dragRow;
+		if (!from?.node.loc || !row.node.loc || from.frameId !== row.frameId || row.path.includes(from.node.id)) return null;
+		const file = from.node.loc.file;
+		if (zone === 'inside') return takesChildren(row.node) && row.node.loc.file === file ? { parent: row.node.loc, anchor: null } : null;
+		const parentId = row.path.at(-2);
+		const parent = parentId ? editor.findNode(parentId, row.frameId) : null;
+		if (!parent?.loc || parent.loc.file !== file || row.node.loc.file !== file) return null;
+		return { parent: parent.loc, anchor: { target: row.node.loc, position: zone } };
+	}
+
+	function zoneAt(row: LayerRow, event: DragEvent): Zone {
+		const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		const t = (event.clientY - box.top) / box.height;
+		if (takesChildren(row.node) && t > 0.25 && t < 0.75) return 'inside';
+		return t < 0.5 ? 'before' : 'after';
+	}
+
+	function ondragover(row: LayerRow, event: DragEvent) {
+		if (!dragRow) return;
+		const zone = zoneAt(row, event);
+		if (!dropFor(row, zone)) {
+			dropHint = null;
+			return;
+		}
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		dropHint = { key: row.key, zone };
+	}
+
+	function ondrop(row: LayerRow, event: DragEvent) {
+		event.preventDefault();
+		const target = dropFor(row, zoneAt(row, event));
+		const source = dragRow?.node.loc;
+		dragRow = null;
+		dropHint = null;
+		if (target && source) void moveLayer(row.frameId, target, source);
+	}
+
 	const frameIcon = (bp: Breakpoint) => (bp.width < 600 ? Smartphone : bp.width < 1024 ? Tablet : Monitor);
 </script>
 
@@ -163,11 +215,27 @@
 					aria-expanded={node.children.length ? open : undefined}
 					tabindex="-1"
 					data-frame={row.frameId}
+					draggable={!!node.loc && !editor.editingComponent}
+					ondragstart={(e) => {
+						dragRow = row;
+						e.dataTransfer?.setData('text/plain', node.name);
+						if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+					}}
+					ondragend={() => ((dragRow = null), (dropHint = null))}
+					ondragover={(e) => ondragover(row, e)}
+					ondragleave={() => dropHint?.key === row.key && (dropHint = null)}
+					ondrop={(e) => ondrop(row, e)}
 					onclick={(e) => select(row, e)}
 					onkeydown={() => {}}
 					onmouseenter={() => editor.setHover(row.frameId, node.id)}
 					onmouseleave={() => editor.setHover(row.frameId, null)}
 				>
+					{#if dropHint?.key === row.key}
+						<span
+							class="pointer-events-none absolute right-0 {dropHint.zone === 'inside' ? 'inset-y-0 rounded-control ring-2 ring-accent ring-inset' : dropHint.zone === 'before' ? '-top-px h-0.5 bg-accent' : '-bottom-px h-0.5 bg-accent'}"
+							style="left:{6 + row.depth * 14}px"
+						></span>
+					{/if}
 					<button
 						type="button"
 						class="flex size-3.5 shrink-0 items-center justify-center {node.children.length ? '' : 'invisible'}"

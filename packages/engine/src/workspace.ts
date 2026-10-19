@@ -20,7 +20,7 @@ import type {
 import { locKey } from '@codesigner/protocol';
 import { SvelteDoc, type ElementLike, type Located } from './svelte/doc.js';
 import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
-import { EditError, duplicate, insert, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
+import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
 import { addVariantValue, editVariantClasses } from './svelte/variants.js';
 import { applyTokenEdit, parseTokens } from './tokens.js';
@@ -140,7 +140,7 @@ export class Workspace {
 			case 'insert':
 				return [...('root' in op.parent ? [] : [op.parent]), ...(op.anchor ? [op.anchor.target] : [])];
 			case 'move':
-				return [op.target, op.parent];
+				return [op.target, op.parent, ...(op.anchor ? [op.anchor.target] : [])];
 			case 'variant-classes':
 			case 'add-variant':
 				return [];
@@ -156,6 +156,14 @@ export class Workspace {
 		const files = new Set(targets.map((t) => t.file));
 		if (files.size !== 1) throw new EditError('All layers in one edit must come from the same file');
 		return targets[0].file;
+	}
+
+	/** Index among `parent`'s children for an insert/move next to `anchor` (its enclosing child: it may sit in an {#if}/{#each}). */
+	private anchorIndex(doc: SvelteDoc, parent: ElementLike | null, index: number, anchor: { target: SourceLoc; position: 'before' | 'after' } | undefined, skip?: ElementLike): number {
+		if (!anchor) return index;
+		const node = this.locate(doc, anchor.target).node;
+		const at = insertionChildren(doc, parent, skip).findIndex((n) => n.start <= node.start && node.end <= n.end);
+		return at < 0 ? index : anchor.position === 'before' ? at : at + 1;
 	}
 
 	/** Applies one operation to `doc`, returning the new text. */
@@ -193,15 +201,7 @@ export class Workspace {
 				break;
 			case 'insert': {
 				const parent = 'root' in op.parent ? null : this.locate(doc, op.parent).node;
-				let index = op.index;
-				if (op.anchor) {
-					const anchor = this.locate(doc, op.anchor.target).node;
-					const children = (parent ? parent.fragment : doc.ast.fragment).nodes.filter((n) => n.type !== 'Text' || n.data.trim() !== '');
-					// The anchor may sit inside an {#if}/{#each} block: use the parent's child that encloses it.
-					const at = children.findIndex((n) => n.start <= anchor.start && anchor.end <= n.end);
-					if (at >= 0) index = op.anchor.position === 'before' ? at : at + 1;
-				}
-				insert(doc, s, parent, index, op.markup);
+				insert(doc, s, parent, this.anchorIndex(doc, parent, op.index, op.anchor), op.markup);
 				break;
 			}
 			case 'remove':
@@ -210,9 +210,12 @@ export class Workspace {
 			case 'duplicate':
 				duplicate(doc, s, op.targets.map((t) => this.locate(doc, t)));
 				break;
-			case 'move':
-				move(doc, s, this.locate(doc, op.target), this.locate(doc, op.parent).node, op.index);
+			case 'move': {
+				const target = this.locate(doc, op.target);
+				const parent = this.locate(doc, op.parent).node;
+				move(doc, s, target, parent, this.anchorIndex(doc, parent, op.index, op.anchor, target.node));
 				break;
+			}
 			case 'rename-tag':
 				renameTag(doc, s, this.locate(doc, op.target).node, op.tag);
 				break;
@@ -239,6 +242,7 @@ export class Workspace {
 				const previous = entry.current;
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
 				if (op.type === 'insert') created.push(insertedAt(file, previous, entry.current, op.markup));
+				if (op.type === 'move') created.push(insertedAt(file, previous, entry.current, previous.split('\n')[op.target.line - 1].slice(op.target.column)));
 				texts.set(file, entry);
 			}
 		} catch (error) {
@@ -441,7 +445,7 @@ function insertedAt(file: string, before: string, after: string, markup: string)
 	while (prefix < before.length && before.charCodeAt(prefix) === after.charCodeAt(prefix)) prefix++;
 	const added = after.length - before.length;
 	const first = markup.split('\n')[0];
-	let start = after.indexOf(first, Math.max(0, prefix - added));
+	let start = after.indexOf(first, Math.max(0, prefix - Math.abs(added)));
 	if (start < 0) start = after.indexOf('<', prefix);
 	const lines = after.slice(0, start).split('\n');
 	return { file, line: lines.length, column: lines[lines.length - 1].length };

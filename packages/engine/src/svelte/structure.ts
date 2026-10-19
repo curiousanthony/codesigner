@@ -151,10 +151,15 @@ export function duplicate(doc: SvelteDoc, s: MagicString, targets: Located<Eleme
 }
 
 /** Inserts markup as the `index`-th element child of `parent` (or of the file's root markup). */
-export function insert(doc: SvelteDoc, s: MagicString, parent: ElementLike | null, index: number, markup: string) {
-	const unit = doc.indentUnit();
+/** Children that count for insertion indexes (not whitespace), minus a layer being moved away. */
+export function insertionChildren(doc: SvelteDoc, parent: ElementLike | null, skip?: ElementLike) {
 	const fragment = parent ? parent.fragment : doc.ast.fragment;
-	const children = fragment.nodes.filter((n) => n.type !== 'Text' || n.data.trim() !== '');
+	return fragment.nodes.filter((n) => (n.type !== 'Text' || n.data.trim() !== '') && n !== skip);
+}
+
+export function insert(doc: SvelteDoc, s: MagicString, parent: ElementLike | null, index: number, markup: string, skip?: ElementLike) {
+	const unit = doc.indentUnit();
+	const children = insertionChildren(doc, parent, skip);
 	const at = index < 0 || index > children.length ? children.length : index;
 
 	if (parent && doc.isSelfClosing(parent)) {
@@ -194,6 +199,7 @@ export function insert(doc: SvelteDoc, s: MagicString, parent: ElementLike | nul
 
 /** Moves an element to another position (same file). */
 export function move(doc: SvelteDoc, s: MagicString, target: Located<ElementLike>, parent: ElementLike | null, index: number) {
+	// `index` counts the parent's children without the moved layer.
 	if (parent && containsNode(target.node, parent)) {
 		throw new EditError("Can't move a layer inside itself");
 	}
@@ -204,7 +210,7 @@ export function move(doc: SvelteDoc, s: MagicString, target: Located<ElementLike
 	// Normalize the moved markup to zero base indentation before inserting.
 	const normalized = firstLine + rest.replace(new RegExp(`\n${baseIndent}`, 'g'), '\n');
 	remove(doc, s, [target]);
-	insert(doc, s, parent, index, normalized);
+	insert(doc, s, parent, index, normalized, target.node);
 }
 
 function containsNode(outer: ElementLike, inner: ElementLike): boolean {
