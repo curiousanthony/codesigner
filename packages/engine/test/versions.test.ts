@@ -92,7 +92,7 @@ describe('ship', () => {
 
 	test('refuses to ship into a checked-out base with uncommitted changes', () => {
 		writeFileSync(join(repo, 'scratch.txt'), 'wip\n');
-		expect(() => shipToBase(wt, 'Hero padding')).toThrow(/uncommitted/);
+		expect(() => shipToBase(wt, 'Hero padding')).toThrow(/cs:base-dirty/);
 		rmSync(join(repo, 'scratch.txt'));
 	});
 
@@ -101,7 +101,7 @@ describe('ship', () => {
 		run(repo, 'commit', '-qam', 'Base edits the same line');
 		const baseBefore = run(repo, 'rev-parse', 'main');
 		writeFileSync(join(wt, 'page.svelte'), '<p class="text-blue-500">hi</p>\n');
-		expect(() => shipToBase(wt, 'Blue')).toThrow(/conflict/);
+		expect(() => shipToBase(wt, 'Blue')).toThrow(/cs:conflict/);
 		expect(run(repo, 'rev-parse', 'main')).toBe(baseBefore);
 		expect(run(wt, 'status', '--porcelain')).toBe('');
 		expect(page()).toBe('<p class="text-blue-500">hi</p>\n'); // saved as a version, not lost
@@ -123,7 +123,7 @@ describe('ship', () => {
 		expect(readFileSync(join(repo, 'page.svelte'), 'utf8')).toBe('<p class="p-6">hi</p>\n');
 		expect(shipStatus(wt).ahead).toBe(0);
 		expect(listVersions(wt)).toEqual([]);
-		expect(() => shipToBase(wt, 'Again')).toThrow(/Nothing to ship/);
+		expect(() => shipToBase(wt, 'Again')).toThrow(/cs:nothing/);
 	});
 
 	test('ships into a base that is not checked out by moving the branch ref', () => {
@@ -138,7 +138,7 @@ describe('ship', () => {
 
 	test('pushes the branch for a pull request (compare page without gh on a non-GitHub remote)', () => {
 		writeFileSync(join(wt, 'page.svelte'), '<p class="p-2">hi</p>\n');
-		expect(() => openPullRequest(wt, 'Tighter hero', '')).toThrow(/Pushed/);
+		expect(() => openPullRequest(wt, 'Tighter hero', '')).toThrow(/cs:pushed/);
 		expect(run(origin, 'rev-parse', 'design/hero')).toBe(run(wt, 'rev-parse', 'HEAD'));
 	});
 });
@@ -149,10 +149,10 @@ describe('branches', () => {
 		expect(renamed).toBe('design/hero-v2');
 		expect(run(repo, 'config', 'branch.design/hero-v2.codesigner-base')).toBe('main');
 		expect(run(wt, 'symbolic-ref', '--short', 'HEAD')).toBe('design/hero-v2');
-		expect(() => deleteDesignBranch(repo, 'design/hero-v2')).toThrow(/unshipped/);
+		expect(() => deleteDesignBranch(repo, 'design/hero-v2')).toThrow(/cs:unpublished/);
 		deleteDesignBranch(repo, 'design/hero-v2', true);
 		expect(existsSync(wt)).toBe(false);
 		expect(() => run(repo, 'rev-parse', '--verify', '--quiet', 'refs/heads/design/hero-v2')).toThrow();
-		expect(() => deleteDesignBranch(repo, 'main')).toThrow(/design branches/);
+		expect(() => deleteDesignBranch(repo, 'main')).toThrow(/cs:not-design/);
 	});
 });

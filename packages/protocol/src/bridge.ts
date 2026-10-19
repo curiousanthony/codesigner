@@ -164,7 +164,7 @@ export type HostToGuest =
 	| { type: 'drop-target'; reqId: number; x: number; y: number; exclude?: NodeId }
 	| { type: 'describe'; reqId: number; ids: NodeId[] }
 	| { type: 'find-loc'; reqId: number; loc: SourceLoc }
-	| { type: 'highlight'; hover: NodeId | null; selected: NodeId[] }
+	| { type: 'highlight'; hover: NodeId | null; selected: NodeId[]; /** Parents of the selection, outlined faintly. */ parents?: NodeId[] }
 	| { type: 'request-tree' }
 	/** Files (relative to the project) whose markup is selectable without entering a component. */
 	| { type: 'set-scope'; files: string[] }
@@ -193,7 +193,7 @@ export type GuestToHost =
 	| { type: 'found-loc'; reqId: number; ids: NodeId[] }
 	| { type: 'tree'; root: LayerNode | null }
 	/** Rects (guest viewport px) of highlighted layers; sent on scroll, resize, mutation and HMR. */
-	| { type: 'rects'; hover: Rect | null; selected: Record<NodeId, Rect>; anchors?: Record<string, Rect | null> }
+	| { type: 'rects'; hover: Rect | null; selected: Record<NodeId, Rect>; parents?: Record<NodeId, Rect>; /** In-place component editing: the instances left undimmed. */ focus?: Rect[]; anchors?: Record<string, Rect | null> }
 	| { type: 'dom-changed'; reason: 'mutation' | 'hmr' }
 	| { type: 'navigated'; url: string; title: string }
 	| { type: 'scrolled'; consumed: boolean; dx: number; dy: number }

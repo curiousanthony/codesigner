@@ -24,7 +24,8 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Canvas: breakpoint frames (Desktop / Tablet / Phone) as `<webview>`s on a pan/zoom canvas, shared login session, frames follow the primary frame's navigation
 - ✅ Bridge: hover/selection outlines, `__svelte_meta` resolution (element vs component instance vs each ×N), layer tree, rect tracking through scroll/HMR
 - ✅ Pages panel: all routes including groups and `[slug]` routes, with sample param values
-- ✅ Layers panel: tree synced with canvas selection, hover, expand/collapse, open in code
+- ✅ Selection like Framer: hover and click go to the innermost layer under the pointer (an instance is one layer, an inline `<svg>` too), the selection's parent gets a faint outline, `Esc` climbs to the parent, `⌘`-click picks the container at the current level
+- ✅ Layers panel: tree synced with canvas selection, hover, expand/collapse, open in code; page switcher at its top like Framer (pages needing URL values ask for them in the Pages tab)
 - ✅ Style panel v1: Position, Size, Layout, Styles, Text, component props and `tv()` variants
 - ✅ Engine: `classes` op on static, mixed, `cn()`, array and expression class forms; Tailwind design system validation, conflict removal and ordering
 - ✅ Shortcuts: `⇧A` wraps in a Stack (was `S`), `⌘↩` Frame, `⌘⌫` unwrap, `⌘D`, `⌫`, `⌘Z` / `⇧⌘Z`, `Esc` parent, `Enter` children, `⌘0/1/2` zoom, space-drag pan, `⌘E` interact mode
@@ -36,7 +37,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 **Acceptance checks** (verified by `e2e/smoke.ts` on the fixture and `e2e/real-app.ts` on a production SaaS)
 1. ✅ Opening a git project creates a design branch + worktree, starts its dev server, and shows `/login`.
 2. ✅ Logging in inside the canvas logs in every breakpoint frame and survives restarts (persistent session).
-3. ✅ ⌘-clicking a NavItem selects the instance (its usage in `+layout.svelte`), not its inner `<a>`.
+3. ✅ Clicking a NavItem selects the instance (its usage in `+layout.svelte`), not its inner `<a>`.
 4. ✅ Changing the sidebar `<nav>` gap to 12 changes only `gap-1` → `gap-3`; the canvas updates through HMR.
 5. ✅ Selecting two siblings and pressing `⇧A` (originally `S`) wraps them in `<div class="flex flex-col gap-2">`, indented with the file's tabs.
 6. ✅ `⌘Z` restores the exact previous bytes (git status clean on the real app).
@@ -78,6 +79,7 @@ Tried on the real SaaS (all undone, worktree clean): hover state and `dark:` edi
 - ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`
 - ✅ Component isolation page served by the app's own dev server (git-ignored route `src/routes/__codesigner`, root layout only)
 - ✅ Components without `tv()` (most app components): Default / Hover / Pressed, a cell per boolean prop, a row per enum prop, sample values for required props; edits change the component's own markup (`hover:` classes for state cells). Double-click a component in Assets to open it
+- ✅ Edit a component in place: from an instance that needs page data the canvas can't invent (a list of cards…), "Edit component" keeps the page and its real data, makes the component's own layers selectable, dims the rest (click it or `Esc` to go back); edits go to the component file. Tried on the real SaaS's KPI row (undone)
 - ✅ Create a component from the selection (`⌥⌘K`, or the component button in the Style panel): the markup moves to `src/lib/components/<Name>.svelte`, values it reads from the page (script variables, `{#each}` items, snippets) become props, its imports are copied, two-way state is refused; undo deletes the file
 - ⬜ Expose a property (the ⊕ binding): turn a static value inside a component into a prop
 
@@ -88,7 +90,8 @@ Verified by `e2e/smoke.ts` on the fixture (save → restore → ship into the ch
 - ✅ Pick the branch to start designing from: first open asks (local and remote branches, newest first, or edit the checkout directly); "New design branch…" in the branch menu takes a base too
 - ✅ Branch menu in the top bar: switch, create (from any branch), rename, delete design branches (`⇧⌘B` new); each keeps its own dev server
 - ✅ Silent checkpoints (a version is saved 20 s after editing pauses, named after the edits) + version history (`⇧⌘H`) with restore (as a new version, nothing lost)
-- ✅ "Ship": merge into the base branch as one commit (fast-forwards the checkout when the base is checked out and clean, moves the branch otherwise), or push and open a PR (`gh`, else the compare page); "Update" when the base moved on
+- ✅ Version control in designer words: branches are "a separate copy of your app", the `design/` prefix and the worktree folder stay hidden, "Publish" offers one action ("Apply to main", or "Send for review" when the base is only online or has unsaved code changes), engine errors carry codes shown in plain en/fr text
+- ✅ "Publish" (was Ship): merge into the base branch as one commit (fast-forwards the checkout when the base is checked out and clean, moves the branch otherwise), or push and open a PR (`gh`, else the compare page); "Update" when the base moved on
 - ⬜ Ship: visual diff summary (before/after screenshots of changed pages)
 - ⬜ Conflict-aware re-sync when files change outside the app (agents, editors, git)
 

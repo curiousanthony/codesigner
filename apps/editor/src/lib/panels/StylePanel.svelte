@@ -51,7 +51,7 @@
 	} from '#lib/style/tailwind-map.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { breakpointLabel } from '#lib/canvas/breakpoints.js';
-	import { STATE_LABELS, STATE_PREFIX } from '#lib/state/component-canvas.js';
+	import { STATE_LABELS, STATE_PREFIX, buildCanvasSpec } from '#lib/state/component-canvas.js';
 
 	const info = $derived(editor.selected);
 	const multi = $derived(editor.selection.infos.length > 1);
@@ -347,9 +347,14 @@
 		]);
 	}
 
+	/**
+	 * Components open on their own canvas (variants, states, props side by side),
+	 * unless they need data the canvas can't invent (a list of cards…): those are
+	 * edited right here in the page, with the page's real data.
+	 */
 	function editComponent() {
-		if (component) void editor.editComponent(component);
-		else if (info?.definitionFile) editor.setScope([...new Set([...editor.scope, info.definitionFile])]);
+		if (component && !buildCanvasSpec(component).missing.length) void editor.editComponent(component);
+		else if (component?.file ?? info?.definitionFile) editor.editInPlace((component?.file ?? info?.definitionFile)!);
 	}
 
 	// ------------------------------------------------- component canvas
@@ -505,7 +510,7 @@
 					{:else if prop.control === 'text' || prop.control === 'link' || prop.control === 'number'}
 						<TextField value={current?.value ?? ''} placeholder={prop.default?.replace(/^['"`]|['"`]$/g, '') ?? ''} oncommit={(v) => setProp(prop.name, v === '' ? null : v, prop.control === 'number' ? 'expression' : 'string')} />
 					{:else}
-						<span class="truncate text-[11px] text-muted">{prop.type ?? m.component_unsupported()}</span>
+						<span class="truncate text-[11px] text-muted" title={prop.type ?? undefined}>{m.component_unsupported()}</span>
 					{/if}
 				</Row>
 			{/each}
@@ -527,7 +532,6 @@
 	{#if c && classless}
 		<div class="m-3 flex flex-col gap-2 rounded-control bg-component-tint p-2.5 text-[11px] text-component">
 			<p>{m.style_classless({ name: component?.name ?? '' })}</p>
-			<button type="button" class="h-[28px] rounded-control bg-component font-medium text-white" onclick={editComponent}>{m.component_edit()}</button>
 		</div>
 	{:else if c}
 		<!-- Position -->

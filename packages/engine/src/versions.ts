@@ -2,6 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import type { ShipStatus, Version } from '@codesigner/protocol';
 import { checkpoint, currentBranch, git } from './git.js';
+import { ShipError } from './errors.js';
+
+export { ShipError };
 
 /**
  * Version history and shipping for design branches. A design branch's
@@ -111,7 +114,8 @@ export function shipStatus(worktree: string): ShipStatus {
 	};
 }
 
-export class ShipError extends Error {}
+/** `design/hero` → `hero`: the prefix is an implementation detail. */
+const shown = (branch: string) => branch.replace(/^design\//, '');
 
 /**
  * Lands the design branch on its base as ONE commit (a squash, so the base's
@@ -121,12 +125,12 @@ export class ShipError extends Error {}
  */
 export function shipToBase(worktree: string, message: string): string {
 	const branch = currentBranch(worktree);
-	if (!branch) throw new ShipError('The design copy is not on a branch');
+	if (!branch) throw new ShipError('not-on-branch', 'This design copy is not on a branch.');
 	const base = baseOf(worktree, branch);
-	if (!base || !isLocalBranch(worktree, base)) throw new ShipError(`${base ?? 'The base'} is not a local branch: open a pull request instead`);
+	if (!base || !isLocalBranch(worktree, base)) throw new ShipError('remote-base', `${base ?? 'The base'} only exists online: send it for review instead.`, { base: base ?? '' });
 	saveVersion(worktree, message);
 	const baseSha = git(worktree, ['rev-parse', base]);
-	if (tryGit(worktree, ['diff', '--quiet', base, 'HEAD']) !== null) throw new ShipError(`Nothing to ship: ${branch} matches ${base}`);
+	if (tryGit(worktree, ['diff', '--quiet', base, 'HEAD']) !== null) throw new ShipError('nothing', `Nothing to publish: ${shown(branch)} is the same as ${base}.`, { base });
 
 	// Merge the base in the (clean, just saved) design copy: works with any git version, and a
 	// conflict leaves nothing behind. The merge commit itself is dropped by the reset below.
@@ -135,7 +139,7 @@ export function shipToBase(worktree: string, message: string): string {
 			git(worktree, ['merge', '--no-edit', '-q', base]);
 		} catch {
 			tryGit(worktree, ['merge', '--abort']);
-			throw new ShipError(`${base} changed in ways that conflict with this design. Update from ${base} first.`);
+			throw new ShipError('conflict', `${base} changed the same things as this design. Get the latest changes from ${base} first.`, { base });
 		}
 	}
 	const tree = git(worktree, ['rev-parse', 'HEAD^{tree}']);
@@ -143,7 +147,7 @@ export function shipToBase(worktree: string, message: string): string {
 
 	const baseWorktree = worktreeOf(worktree, base);
 	if (baseWorktree) {
-		if (isDirty(baseWorktree)) throw new ShipError(`${base} has uncommitted changes in ${baseWorktree}. Commit or stash them first.`);
+		if (isDirty(baseWorktree)) throw new ShipError('base-dirty', `${base} has unsaved code changes in the project folder (${baseWorktree}). Save or discard them there first.`, { base });
 		git(baseWorktree, ['merge', '--ff-only', '-q', sha]);
 	} else {
 		git(worktree, ['update-ref', `refs/heads/${base}`, sha, baseSha]);
@@ -157,21 +161,21 @@ export function shipToBase(worktree: string, message: string): string {
 export function updateFromBase(worktree: string): void {
 	const branch = currentBranch(worktree);
 	const base = branch ? baseOf(worktree, branch) : null;
-	if (!base) throw new ShipError('This design branch has no base');
-	saveVersion(worktree, 'Before updating from base', true);
+	if (!base) throw new ShipError('no-base', "This branch doesn't know which branch it started from.");
+	saveVersion(worktree, 'Before getting the latest changes', true);
 	try {
 		git(worktree, ['merge', '--no-edit', '-q', base]);
 	} catch {
 		tryGit(worktree, ['merge', '--abort']);
-		throw new ShipError(`Updating from ${base} conflicts with this design. Resolve it in your code editor (git merge ${base}).`);
+		throw new ShipError('update-conflict', `${base} and this design changed the same things: they have to be combined in a code editor (git merge ${base}).`, { base });
 	}
 }
 
 /** Pushes the design branch and opens a pull request into its base (gh), or returns the compare page. */
 export function openPullRequest(worktree: string, title: string, body: string): { url: string; created: boolean } {
 	const status = shipStatus(worktree);
-	if (!status.remote) throw new ShipError('This repository has no "origin" remote');
-	if (!status.base) throw new ShipError('This design branch has no base');
+	if (!status.remote) throw new ShipError('no-remote', 'This project is not connected to GitHub (no "origin" remote).');
+	if (!status.base) throw new ShipError('no-base', "This branch doesn't know which branch it started from.");
 	saveVersion(worktree, title);
 	git(worktree, ['push', '-u', 'origin', status.branch]);
 	const base = status.base.replace(/^origin\//, '');
@@ -192,24 +196,24 @@ export function openPullRequest(worktree: string, title: string, body: string): 
 		}
 	}
 	if (status.compareUrl) return { url: status.compareUrl, created: false };
-	throw new ShipError('Pushed. Open the pull request on your git host.');
+	throw new ShipError('pushed', 'Uploaded. Open your Git host to request the review.');
 }
 
 export function renameDesignBranch(root: string, from: string, to: string): string {
 	const name = to.startsWith('design/') ? to : `design/${to}`;
-	if (!from.startsWith('design/')) throw new ShipError('Only design branches can be renamed here');
+	if (!from.startsWith('design/')) throw new ShipError('not-design', 'Only branches made in Codesigner can be renamed or deleted here.');
 	git(root, ['branch', '-m', from, name]);
 	return name;
 }
 
 /** Removes a design branch and its folder. Refuses unshipped work unless `force`. */
 export function deleteDesignBranch(root: string, name: string, force = false): void {
-	if (!name.startsWith('design/')) throw new ShipError('Only design branches can be deleted here');
+	if (!name.startsWith('design/')) throw new ShipError('not-design', 'Only branches made in Codesigner can be renamed or deleted here.');
 	const dir = worktreeOf(root, name);
-	if (dir && realpathSync(dir) === realpathSync(root)) throw new ShipError("The main checkout can't be deleted");
+	if (dir && realpathSync(dir) === realpathSync(root)) throw new ShipError('project-folder', "The project folder can't be deleted.");
 	if (!force && dir) {
 		const status = shipStatus(dir);
-		if (status.dirty || status.ahead > 0) throw new ShipError(`${name} has unshipped changes`);
+		if (status.dirty || status.ahead > 0) throw new ShipError('unpublished', `${shown(name)} has unpublished changes.`, { name: shown(name) });
 	}
 	if (dir) git(root, ['worktree', 'remove', '--force', dir]);
 	git(root, ['branch', '-D', name]);

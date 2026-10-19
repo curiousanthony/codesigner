@@ -70,7 +70,9 @@
 						? m.server_error()
 						: m.server_stopped()
 	);
-	const branchLabel = $derived(editor.branch?.name ?? (editor.project?.isGitRepo ? '…' : m.branch_no_git()));
+	/** `design/hero` → `hero`: the prefix only matters to git (the real name is in the tooltip). */
+	const shownBranch = (name: string) => name.replace(/^design\//, '');
+	const branchLabel = $derived(editor.branch ? shownBranch(editor.branch.name) : editor.project?.isGitRepo ? '…' : m.branch_no_git());
 
 	/** Picks a draw tool: the next drag or click on the canvas inserts that layer. */
 	function useTool(tool: DrawTool) {
@@ -212,21 +214,21 @@
 		<span class="font-medium text-fg-strong">{editor.project?.name}</span>
 		<span class="text-muted">·</span>
 		<div class="relative">
-			<button type="button" class="flex h-6 items-center gap-1 rounded-[5px] bg-black/[0.05] px-1.5 text-[11px] text-label hover:bg-black/[0.08] dark:bg-white/[0.06]" onclick={() => toggle('branch')}>
+			<button type="button" class="flex h-6 items-center gap-1 rounded-[5px] bg-black/[0.05] px-1.5 text-[11px] text-label hover:bg-black/[0.08] dark:bg-white/[0.06]" title={editor.branch?.name} onclick={() => toggle('branch')}>
 				<GitBranch class="size-3" />
 				<span class="max-w-48 truncate">{branchLabel}</span>
 				<ChevronDown class="size-3" />
 			</button>
 			{#if menu === 'branch'}
 				<div class="absolute top-full left-1/2 mt-1.5 w-[340px] -translate-x-1/2 rounded-popover bg-popover p-1.5 shadow-popover" role="menu">
-					<p class="px-2 pt-1 pb-1.5 text-[11px] text-muted">{m.branch_title()}</p>
+					<p class="px-2 pt-1 text-[11px] font-medium text-label">{m.branch_title()}</p>
+					<p class="px-2 pt-0.5 pb-1.5 text-[11px] text-muted">{m.branch_hint()}</p>
 					<div class="max-h-[50vh] overflow-y-auto">
 					{#each editor.branches as branch (branch.worktree)}
 						{@const design = !branch.isMainCheckout && branch.name.startsWith('design/')}
 						{#if renaming?.name === branch.name}
 							<form class="flex h-9 items-center gap-1 px-1" onsubmit={(e) => { e.preventDefault(); void submitRename(); }}>
 								<span class="flex h-7 min-w-0 flex-1 items-center rounded-[6px] bg-control px-2">
-									<span class="text-muted">design/</span>
 									<!-- svelte-ignore a11y_autofocus -->
 									<input class="min-w-0 flex-1 bg-transparent outline-none" bind:value={renaming.value} autofocus onkeydown={(e) => e.key === 'Escape' && (renaming = null)} />
 								</span>
@@ -234,7 +236,7 @@
 							</form>
 						{:else if deleting?.name === branch.name}
 							<div class="flex min-h-9 items-center gap-1.5 rounded-[6px] bg-danger/10 px-2 py-1.5">
-								<span class="flex-1 text-[11px] text-fg">{deleting.unshipped ? m.branch_delete_unshipped({ name: branch.name }) : m.branch_delete_confirm({ name: branch.name })}</span>
+								<span class="flex-1 text-[11px] text-fg">{deleting.unshipped ? m.branch_delete_unshipped({ name: shownBranch(branch.name) }) : m.branch_delete_confirm({ name: shownBranch(branch.name) })}</span>
 								<button type="button" class="h-6 rounded-[5px] px-2 text-label hover:bg-control" onclick={() => (deleting = null)}>{m.action_cancel()}</button>
 								<button type="button" class="h-6 rounded-[5px] bg-danger px-2 text-white" onclick={() => submitDelete()}>{m.branch_delete()}</button>
 							</div>
@@ -243,6 +245,7 @@
 								<button
 									type="button"
 									class="flex min-w-0 flex-1 items-center gap-2 text-left"
+									title={branch.name}
 									onclick={() => {
 										menu = null;
 										if (branch.worktree !== editor.worktree) void editor.switchWorktree(branch.worktree);
@@ -250,7 +253,7 @@
 								>
 									<GitBranch class="size-3.5 shrink-0 {branch.isMainCheckout ? 'text-label' : 'text-accent'}" />
 									<span class="flex min-w-0 flex-1 flex-col">
-										<span class="truncate">{branch.name}</span>
+										<span class="truncate">{shownBranch(branch.name)}</span>
 										<span class="truncate text-[10px] text-muted">
 											{branch.isMainCheckout ? m.branch_main_checkout() : m.branch_from({ base: branch.baseBranch ?? '?' })}
 											{#if branch.ahead}· {m.branch_ahead({ count: branch.ahead })}{/if}
@@ -277,7 +280,6 @@
 						{#if creating}
 							<form class="mt-1.5 flex flex-col gap-2 border-t border-divider px-0.5 pt-2" onsubmit={(e) => { e.preventDefault(); void createBranch(); }}>
 								<span class="flex h-7 items-center rounded-[6px] bg-control px-2">
-									<span class="text-muted">design/</span>
 									<!-- svelte-ignore a11y_autofocus -->
 									<input class="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted" placeholder={m.branch_new_placeholder()} bind:value={newBranch} autofocus />
 								</span>
@@ -359,20 +361,29 @@
 						</div>
 					{/if}
 					<input class="h-[30px] w-full rounded-control bg-control px-2 outline-none placeholder:text-muted" placeholder={m.ship_message_placeholder()} bind:value={shipMessage} />
-					{#if ship?.baseIsLocal}
+					{#if ship?.baseIsLocal && !ship.baseDirty}
 						<button type="button" class="h-[30px] w-full rounded-control bg-accent font-medium text-white hover:bg-accent-strong disabled:opacity-50"
-							disabled={shipBusy || nothingToShip || ship.baseDirty} onclick={() => shipAction(() => editor.ship(shipText))}>
+							disabled={shipBusy || nothingToShip} onclick={() => shipAction(() => editor.ship(shipText))}>
 							{m.ship_merge({ base: ship.base ?? '' })}
 						</button>
-						{#if ship.baseDirty}<p class="text-[11px] text-warning">{m.ship_base_dirty({ base: ship.base ?? '' })}</p>{/if}
-					{:else if ship?.base}
-						<p class="text-[11px] text-label">{m.ship_remote_base({ base: ship.base })}</p>
-					{/if}
-					{#if ship?.remote}
-						<button type="button" class="h-[30px] w-full rounded-control font-medium disabled:opacity-50 {ship.baseIsLocal ? 'bg-control text-fg hover:bg-control-hover' : 'bg-accent text-white hover:bg-accent-strong'}"
-							disabled={shipBusy || nothingToShip} onclick={() => shipAction(() => editor.pullRequest(shipText))}>
-							{m.ship_pull_request()}
-						</button>
+						<p class="-mt-1 text-[11px] text-muted">{m.ship_merge_hint({ base: ship.base ?? '' })}</p>
+						{#if ship.remote}
+							<button type="button" class="-mt-1 self-start text-[11px] text-accent hover:underline disabled:opacity-50" disabled={shipBusy || nothingToShip}
+								onclick={() => shipAction(() => editor.pullRequest(shipText))}>{m.ship_or_review()}</button>
+						{/if}
+					{:else if ship}
+						{#if ship.baseDirty}
+							<p class="text-[11px] text-warning">{m.ship_base_dirty({ base: ship.base ?? '' })}</p>
+						{:else if ship.base}
+							<p class="text-[11px] text-label">{m.ship_remote_base({ base: ship.base })}</p>
+						{/if}
+						{#if ship.remote}
+							<button type="button" class="h-[30px] w-full rounded-control bg-accent font-medium text-white hover:bg-accent-strong disabled:opacity-50"
+								disabled={shipBusy || nothingToShip} onclick={() => shipAction(() => editor.pullRequest(shipText))}>
+								{m.ship_pull_request()}
+							</button>
+							<p class="-mt-1 text-[11px] text-muted">{m.ship_pr_hint()}</p>
+						{/if}
 					{/if}
 					<div class="flex items-center gap-1 border-t border-divider pt-2">
 						<button type="button" class="h-7 rounded-[6px] px-2 whitespace-nowrap text-label hover:bg-control disabled:opacity-50" disabled={shipBusy || !ship?.dirty}

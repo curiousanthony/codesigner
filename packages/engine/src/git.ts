@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { DesignBranch, SourceBranch } from '@codesigner/protocol';
+import { ShipError } from './errors.js';
 
 export function git(cwd: string, args: string[], input?: string): string {
 	return execFileSync('git', args, {
@@ -150,11 +151,11 @@ export function createDesignBranch(repoRoot: string, name: string, from?: string
 	const home = worktreesHome(repoRoot);
 	mkdirSync(home, { recursive: true });
 	const dir = join(home, branch.slice(DESIGN_PREFIX.length).replace(/\//g, '-'));
-	if (existsSync(dir)) throw new Error(`A design branch folder already exists at ${dir}`);
+	if (existsSync(dir)) throw new ShipError('folder-exists', `A copy for this branch already exists (${dir}). Pick another name.`);
 
 	const exists = tryGit(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]) !== null;
 	// Reusing an existing branch would silently ignore the base the user picked.
-	if (exists && from) throw new Error(`A branch named ${branch} already exists. Pick another name.`);
+	if (exists && from) throw new ShipError('name-taken', `A branch named ${slug.replace(/^design\//, '')} already exists. Pick another name.`, { name: slug.replace(/^design\//, '') });
 	git(repoRoot, exists ? ['worktree', 'add', dir, branch] : ['worktree', 'add', '-b', branch, dir, base]);
 	git(repoRoot, ['config', `branch.${branch}.codesigner-base`, base]);
 	copyEnvFiles(repoRoot, dir);

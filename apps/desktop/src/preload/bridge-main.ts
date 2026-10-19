@@ -55,6 +55,7 @@ export function bridgeMain(config: BridgeConfig) {
 	let mode: CanvasMode = 'design';
 	let hoverId: NodeId | null = null;
 	let selectedIds: NodeId[] = [];
+	let parentIds: NodeId[] = [];
 
 	const send = (msg: GuestToHost) =>
 		document.dispatchEvent(new CustomEvent(config.toHost, { detail: JSON.stringify(msg) }));
@@ -82,6 +83,8 @@ export function bridgeMain(config: BridgeConfig) {
 	const metaOf = (el: Element): Meta | null => (el as unknown as { __svelte_meta?: Meta }).__svelte_meta ?? null;
 	const isUserFile = (file: string | undefined) =>
 		!!file && !file.includes('node_modules/') && !file.startsWith('.svelte-kit/') && !file.includes('/.svelte-kit/');
+	/** Editing a component in place: the scope is that component only (no route folder). */
+	const focusing = () => scope.length > 0 && !scope.some((s) => s.endsWith('/'));
 	const inScope = (file: string) => scope.some((s) => (s.endsWith('/') ? file.startsWith(s) : file === s));
 	const framesOf = (meta: Meta): DevFrame[] => {
 		const out: DevFrame[] = [];
@@ -117,6 +120,7 @@ export function bridgeMain(config: BridgeConfig) {
 
 	// --------------------------------------------------------- layer tree
 	let recs = new Map<NodeId, LayerRec>();
+	let treeRoot: LayerRec | null = null;
 	let locCounts = new Map<string, number>();
 	let treeDirty = true;
 
@@ -149,6 +153,7 @@ export function bridgeMain(config: BridgeConfig) {
 		};
 		if (document.body) walk(document.body, root);
 		treeDirty = false;
+		treeRoot = root;
 		return root;
 	};
 
@@ -407,6 +412,8 @@ export function bridgeMain(config: BridgeConfig) {
 		const chain: Element[] = [];
 		let prevKey: unknown = null;
 		for (let cur: Element | null = hit; cur && cur !== document.documentElement; cur = cur.parentElement) {
+			// An inline <svg> is one layer, like in Framer: its paths aren't picked one by one.
+			if (cur instanceof SVGElement && !(cur instanceof SVGSVGElement)) continue;
 			const layer = layerOf(cur);
 			if (!layer) continue;
 			if (layer.key === prevKey) {
@@ -590,13 +597,24 @@ export function bridgeMain(config: BridgeConfig) {
 			if (done) return;
 			done = true;
 			rectsQueued = false;
-			if (!hoverId && selectedIds.length === 0 && anchors.length === 0) return;
+			// Editing a component in place: the rest of the page is dimmed around its instances.
+			if (!hoverId && selectedIds.length === 0 && anchors.length === 0 && !focusing()) return;
+			let focus: Rect[] | undefined;
+			if (focusing()) {
+				ensureTree();
+				focus = (treeRoot?.children ?? []).map((rec) => unionRect(rec.els)).filter((r): r is Rect => !!r && r.width > 0 && r.height > 0);
+			}
 			const selected: Record<NodeId, Rect> = {};
 			for (const id of selectedIds) {
 				const r = rectFor(id);
 				if (r) selected[id] = r;
 			}
-			send({ type: 'rects', hover: hoverId ? rectFor(hoverId) : null, selected, ...(anchors.length ? { anchors: anchorRects() } : {}) });
+			const parents: Record<NodeId, Rect> = {};
+			for (const id of parentIds) {
+				const r = rectFor(id);
+				if (r) parents[id] = r;
+			}
+			send({ type: 'rects', hover: hoverId ? rectFor(hoverId) : null, selected, parents, focus, ...(anchors.length ? { anchors: anchorRects() } : {}) });
 		};
 		requestAnimationFrame(run);
 		setTimeout(run, 100);
@@ -681,11 +699,14 @@ export function bridgeMain(config: BridgeConfig) {
 				scope = msg.scope;
 				mode = msg.mode;
 				treeDirty = true;
+				pushRects();
 				break;
 			case 'set-scope':
 				scope = msg.files;
 				treeDirty = true;
 				send({ type: 'tree', root: toTree() });
+				send({ type: 'rects', hover: null, selected: {} }); // clears the dimming when leaving
+				pushRects();
 				break;
 			case 'set-mode':
 				mode = msg.mode;
@@ -709,7 +730,8 @@ export function bridgeMain(config: BridgeConfig) {
 			case 'highlight':
 				hoverId = msg.hover;
 				selectedIds = msg.selected;
-				if (!hoverId && selectedIds.length === 0 && anchors.length === 0) send({ type: 'rects', hover: null, selected: {} });
+				parentIds = msg.parents ?? [];
+				if (!hoverId && selectedIds.length === 0 && anchors.length === 0 && !focusing()) send({ type: 'rects', hover: null, selected: {} });
 				else pushRects();
 				break;
 			case 'set-anchors':

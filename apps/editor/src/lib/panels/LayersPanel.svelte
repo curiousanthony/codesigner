@@ -6,6 +6,7 @@
 	import { moveLayer } from '#lib/state/commands.js';
 	import { breakpointLabel } from '#lib/canvas/breakpoints.js';
 	import LayerIcon from './LayerIcon.svelte';
+	import PagePicker from './PagePicker.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let query = $state('');
@@ -142,6 +143,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
+	<PagePicker />
 	<div class="px-2.5 pb-2">
 		<label class="flex h-[30px] items-center gap-2 rounded-control bg-control px-2.5 text-muted">
 			<Search class="size-3.5 shrink-0" />

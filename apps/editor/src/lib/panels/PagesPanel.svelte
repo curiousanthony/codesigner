@@ -20,13 +20,19 @@
 	const hasParams = (route: RouteInfo) => route.params.some((p) => !p.optional);
 
 	function open(route: RouteInfo) {
-		const saved = editor.project?.settings.routeParams[route.id] ?? {};
-		const ok = editor.navigate(route, saved);
-		if (!ok) {
-			editingParams = route.id;
-			draft = Object.fromEntries(route.params.map((p) => [p.name, saved[p.name] ?? '']));
-		}
+		editor.openRoute(route);
 	}
+
+	// A page that needs parameters (opened here or from the Layers panel's switcher) asks for them.
+	$effect(() => {
+		const id = editor.paramsRequest;
+		const route = id ? editor.routes.find((r) => r.id === id) : null;
+		if (!route) return;
+		const saved = editor.project?.settings.routeParams[route.id] ?? {};
+		editingParams = route.id;
+		draft = Object.fromEntries(route.params.map((p) => [p.name, saved[p.name] ?? '']));
+		editor.paramsRequest = null;
+	});
 
 	async function applyParams(route: RouteInfo) {
 		const values = { ...draft };

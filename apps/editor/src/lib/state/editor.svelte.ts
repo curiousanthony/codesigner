@@ -27,7 +27,7 @@ import type {
 	Version,
 	UpdateInfo
 } from '@codesigner/protocol';
-import { errorMessage, inDesktop, invoke, on } from '#lib/api.js';
+import { errorCode, errorMessage, inDesktop, invoke, on } from '#lib/api.js';
 import type { BridgeClient } from '#lib/canvas/bridge-client.js';
 import { parentOf, pickLayer } from '#lib/canvas/selection.js';
 import { buildUrl, matchRoute } from './routes';
@@ -136,6 +136,10 @@ class EditorState {
 	hover = $state<{ frameId: string; id: NodeId } | null>(null);
 	hoverRect = $state<{ frameId: string; rect: Rect } | null>(null);
 	selectedRects = $state<Record<string, Record<NodeId, Rect>>>({});
+	/** Parents of the selection per frame, outlined faintly so you can see what a layer sits in. */
+	parentRects = $state<Record<string, Record<NodeId, Rect>>>({});
+	/** Editing a component in place: rects of its instances per frame (the rest is dimmed). */
+	focusRects = $state<Record<string, Rect[]>>({});
 	/** Files that the editor scopes selection to (routes by default; a component file when editing it). */
 	scope = $state<string[]>(['src/routes/']);
 
@@ -223,6 +227,18 @@ class EditorState {
 		const next = { ...this.expanded };
 		for (const id of ids) next[`${frameId}:${id}`] = open;
 		this.expanded = next;
+	}
+
+	/** A page that needs parameters before it can open: the Pages tab asks for them. */
+	paramsRequest = $state<string | null>(null);
+
+	/** Opens a page with its saved parameters, or asks for them in the Pages tab. */
+	openRoute(route: RouteInfo): boolean {
+		const saved = this.project?.settings.routeParams[route.id] ?? {};
+		if (this.navigate(route, saved)) return true;
+		this.leftTab = 'pages';
+		this.paramsRequest = route.id;
+		return false;
 	}
 
 	get currentRoute(): RouteInfo | null {
@@ -514,11 +530,11 @@ class EditorState {
 		try {
 			const branch = await invoke('branch:create', this.project.root, name, from);
 			this.branches = await invoke('branch:list', this.project.root);
-			if (!silent) this.toast(`Created ${branch.name}`, 'success');
+			if (!silent) this.toast(m.branch_created({ name: branch.name.replace(/^design\//, '') }), 'success');
 			return branch;
 		} catch (error) {
 			const message = errorMessage(error);
-			if (/already exists/.test(message) && silent) {
+			if ((errorCode(error) === 'folder-exists' || errorCode(error) === 'name-taken') && silent) {
 				this.branches = await invoke('branch:list', this.project.root);
 				return this.branches.find((b) => b.name.endsWith(name)) ?? null;
 			}
@@ -808,15 +824,15 @@ class EditorState {
 		this.setExpanded(frameId, ['@frame', ...path.slice(0, -1)], true);
 	}
 
-	/** Choose what a click on `hitPath` in `frameId` selects (Framer levels). */
-	pick(hitPath: NodeId[], gesture: 'click' | 'double' | 'deep', frameId?: string): NodeId | null {
+	/** Choose what a click on `hitPath` in `frameId` selects: the innermost layer, or with ⌘ the container at the current level. */
+	pick(hitPath: NodeId[], gesture: 'click' | 'container', frameId?: string): NodeId | null {
 		const sameFrame = !frameId || frameId === this.selection.frameId;
 		const current = sameFrame ? this.selection.ids[0] : frameId ? this.mirrors[frameId]?.[0] : undefined;
 		const selectedPath = !current ? null : sameFrame ? (this.selection.paths[current] ?? null) : this.pathOf(current, frameId);
 		return pickLayer(hitPath, selectedPath, gesture);
 	}
 
-	async selectFromHit(frameId: string, hitPath: NodeId[], gesture: 'click' | 'double' | 'deep', additive = false) {
+	async selectFromHit(frameId: string, hitPath: NodeId[], gesture: 'click' | 'container', additive = false) {
 		const id = this.pick(hitPath, gesture, frameId);
 		if (!id) {
 			if (!additive) this.clearSelection();
@@ -907,11 +923,11 @@ class EditorState {
 
 	syncHighlights() {
 		for (const [frameId, frame] of this.frames) {
-			frame.send({
-				type: 'highlight',
-				hover: this.hover?.frameId === frameId ? this.hover.id : null,
-				selected: this.selection.frameId === frameId ? this.selection.ids : (this.mirrors[frameId] ?? [])
-			});
+			const selected = this.selection.frameId === frameId ? this.selection.ids : (this.mirrors[frameId] ?? []);
+			const parents = selected
+				.map((id) => parentOf(this.selection.frameId === frameId ? (this.selection.paths[id] ?? this.pathOf(id, frameId)) : this.pathOf(id, frameId)))
+				.filter((id): id is NodeId => !!id && !selected.includes(id));
+			frame.send({ type: 'highlight', hover: this.hover?.frameId === frameId ? this.hover.id : null, selected, parents });
 		}
 		this.syncForcedState();
 	}
@@ -1048,7 +1064,9 @@ class EditorState {
 		}
 	}
 
-	setRects(frameId: string, hover: Rect | null, selected: Record<NodeId, Rect>, anchors?: Record<string, Rect | null>) {
+	setRects(frameId: string, hover: Rect | null, selected: Record<NodeId, Rect>, parents?: Record<NodeId, Rect>, focus?: Rect[], anchors?: Record<string, Rect | null>) {
+		this.parentRects = { ...this.parentRects, [frameId]: parents ?? {} };
+		if (focus || this.focusRects[frameId]) this.focusRects = { ...this.focusRects, [frameId]: focus ?? [] };
 		if (anchors) this.pinRects = { ...this.pinRects, [frameId]: anchors };
 		this.hoverRect = hover && this.hover?.frameId === frameId ? { frameId, rect: hover } : this.hoverRect?.frameId === frameId ? null : this.hoverRect;
 		this.selectedRects = { ...this.selectedRects, [frameId]: selected };
@@ -1214,10 +1232,26 @@ class EditorState {
 		setTimeout(() => void this.refreshSelectionInfo(), 120); // colors shown in the panel follow the theme
 	}
 
+	/** Editing a component inside the page (scope is that component only, no route folder). */
+	get inPlace(): boolean {
+		return !this.editingComponent && this.scope.length > 0 && !this.scope.some((s) => s.endsWith('/'));
+	}
+
+	exitInPlace() {
+		this.setScope(['src/routes/']);
+	}
+
+	/** Edits a component inside the page, with the page's real data (the rest of the page is dimmed). */
+	editInPlace(file: string) {
+		this.setScope([file]);
+		this.leftTab = 'layers';
+	}
+
 	setScope(files: string[]) {
 		this.scope = files;
 		this.selection = EMPTY_SELECTION;
 		this.mirrors = {};
+		this.syncHighlights();
 		for (const frame of this.frames.values()) frame.send({ type: 'set-scope', files });
 	}
 }

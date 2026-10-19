@@ -112,10 +112,9 @@ log('nav point', nav, await page.evaluate(async ({ x, y }) => {
 	const at = await webview.executeJavaScript('(() => { const el = document.elementFromPoint(' + gx + ',' + gy + '); return el ? el.outerHTML.slice(0, 120) + " meta:" + JSON.stringify(el.__svelte_meta && el.__svelte_meta.loc) : null })()');
 	return { gx, gy, host: [host.left, host.top, host.width], scale: e.camera.scale, names: infos.map((i: any) => i.name + ':' + i.kind), at };
 }, nav));
+// Framer: a plain click selects the innermost layer under the pointer.
 await page.mouse.move(nav.x, nav.y);
-await page.keyboard.down('Meta');
 await page.mouse.click(nav.x, nav.y);
-await page.keyboard.up('Meta');
 await page.waitForTimeout(600);
 const selected = await page.evaluate(() => {
 	const e = (window as any).__editor;
@@ -124,15 +123,19 @@ const selected = await page.evaluate(() => {
 log('deep-selected', JSON.stringify(selected));
 await shot('04-select-navitem');
 
-// Framer levels: plain click selects the top level, double click drills.
+// ⌘-click picks the container at the current level; Esc climbs to the parent.
 await page.evaluate(() => (window as any).__editor.clearSelection());
+await page.keyboard.down('Meta');
 await page.mouse.click(nav.x, nav.y);
+await page.keyboard.up('Meta');
 await page.waitForTimeout(400);
 const level1 = await page.evaluate(() => (window as any).__editor.selection.infos.map((i: any) => i.name));
-await page.mouse.dblclick(nav.x, nav.y);
+await page.mouse.click(nav.x, nav.y);
+await page.waitForTimeout(400);
+await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 const level2 = await page.evaluate(() => (window as any).__editor.selection.infos.map((i: any) => i.name));
-log('click →', level1, ' double-click →', level2);
+log('⌘-click →', level1, ' click then Esc →', level2);
 
 // Select the <nav> element and change its gap in the Style panel.
 const navEl = await guestRect('nav');

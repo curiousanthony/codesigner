@@ -49,7 +49,6 @@
 		<label class="flex flex-col gap-1.5">
 			<span class="text-[11px] font-medium text-label">{m.start_name()}</span>
 			<span class="flex h-[30px] items-center rounded-control bg-control px-2">
-				<span class="text-muted">design/</span>
 				<input class="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted" placeholder={suggested} bind:value={name} />
 			</span>
 		</label>

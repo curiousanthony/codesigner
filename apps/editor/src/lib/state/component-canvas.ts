@@ -16,6 +16,8 @@ export interface CanvasSpec {
 	/** Text passed as children (null when the component takes no children). */
 	text: string | null;
 	sections: { title: string; cells: CanvasCell[] }[];
+	/** Required props the canvas can't make up (lists, objects…): the component renders without its data. */
+	missing: string[];
 }
 
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -54,7 +56,8 @@ export function buildCanvasSpec(component: ComponentInfo): CanvasSpec {
 		});
 	}
 	if (sections.length === 0) sections.push(...propSections(component));
-	return { file: component.file, name: component.name, text: takesChildren ? component.name : null, sections };
+	const missing = component.props.filter((p) => !p.optional && p.default === null && p.name !== 'children' && sample(p) === undefined).map((p) => p.name);
+	return { file: component.file, name: component.name, text: takesChildren ? component.name : null, sections, missing };
 }
 
 /** A value a required prop can render with (its name as text, a link, the first option…). */

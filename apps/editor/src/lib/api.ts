@@ -1,3 +1,4 @@
+import { m } from '#lib/paraglide/messages.js';
 import type { CodesignerApi, EventMap, InvokeArgs, InvokeMap, InvokeResult } from '@codesigner/protocol';
 
 /** True when running inside the Electron shell (window.codesigner is exposed by the preload). */
@@ -20,8 +21,28 @@ export function on<K extends keyof EventMap>(channel: K, listener: (payload: Eve
 	return bridge().on(channel, listener);
 }
 
-/** Error text without Electron's "Error invoking remote method 'x': Error:" prefix. */
-export function errorMessage(error: unknown): string {
+const TAG = /\s*\[cs:([a-z-]+)(?: (\{.*\}))?\]\s*$/;
+
+/** The code of an engine error a designer may see (`[cs:code]` at the end of its message), if any. */
+export function errorCode(error: unknown): string | null {
 	const text = error instanceof Error ? error.message : String(error);
-	return text.replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '');
+	return text.match(TAG)?.[1] ?? null;
+}
+
+/**
+ * Error text without Electron's "Error invoking remote method 'x': Error:"
+ * prefix; engine errors with a code are shown in the user's language.
+ */
+export function errorMessage(error: unknown): string {
+	const text = (error instanceof Error ? error.message : String(error)).replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '');
+	const tag = text.match(TAG);
+	if (!tag) return text;
+	const message = (m as unknown as Record<string, ((params: Record<string, string>) => string) | undefined>)[`err_${tag[1].replace(/-/g, '_')}`];
+	let params: Record<string, string> = {};
+	try {
+		params = tag[2] ? JSON.parse(tag[2]) : {};
+	} catch {
+		// keep the English text
+	}
+	return message ? message(params) : text.replace(TAG, '');
 }

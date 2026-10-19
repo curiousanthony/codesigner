@@ -35,7 +35,7 @@ export function buildMenu(send: (command: string) => void): Menu {
 			label: 'File',
 			submenu: [
 				cmd('Open Project…', 'open-project', 'CmdOrCtrl+O'),
-				cmd('New Design Branch…', 'new-branch', 'CmdOrCtrl+Shift+B'),
+				cmd('New Branch…', 'new-branch', 'CmdOrCtrl+Shift+B'),
 				cmd('Version History…', 'version-history', 'CmdOrCtrl+Shift+H'),
 				{ type: 'separator' },
 				cmd('Open in Code Editor', 'open-in-editor', 'CmdOrCtrl+Shift+O'),

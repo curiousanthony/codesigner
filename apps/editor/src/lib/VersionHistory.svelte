@@ -37,7 +37,7 @@
 			<History class="size-4 text-label" />
 			<div class="min-w-0 flex-1">
 				<h2 id="history-title" class="font-semibold text-fg-strong">{m.history_title()}</h2>
-				<p class="truncate text-[11px] text-muted">{editor.branch?.name}{#if editor.branch?.baseBranch} · {m.history_since({ base: editor.branch.baseBranch })}{/if}</p>
+				<p class="truncate text-[11px] text-muted">{editor.branch?.name.replace(/^design\//, '')}{#if editor.branch?.baseBranch} · {m.history_since({ base: editor.branch.baseBranch })}{/if}</p>
 			</div>
 			<button type="button" class="flex size-6 items-center justify-center rounded-[5px] text-label hover:bg-control" aria-label={m.action_close()} onclick={() => (editor.historyOpen = false)}>
 				<X class="size-3.5" />

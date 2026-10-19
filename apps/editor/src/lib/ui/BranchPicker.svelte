@@ -62,7 +62,7 @@
 				{/if}
 				<span class="flex min-w-0 flex-1 flex-col">
 					<span class="flex items-center gap-1.5">
-						<span class="truncate font-medium {selected ? 'text-accent' : 'text-fg'}">{branch.name}</span>
+						<span class="truncate font-medium {selected ? 'text-accent' : 'text-fg'}" title={branch.name}>{branch.name.replace(/^(origin\/)?design\//, '$1').replace(/^origin\//, '')}</span>
 						{#if branch.current}<span class="shrink-0 rounded-[4px] bg-black/[0.05] px-1 text-[10px] text-label dark:bg-white/[0.06]">{m.branch_checked_out()}</span>{/if}
 					</span>
 					<span class="truncate text-[11px] text-muted">{ago(branch.date)} · {branch.subject}</span>

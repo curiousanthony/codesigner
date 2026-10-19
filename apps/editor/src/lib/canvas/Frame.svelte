@@ -88,7 +88,7 @@
 				if (isComponentCanvas) forceStates();
 				break;
 			case 'rects':
-				editor.setRects(frameId, message.hover, message.selected, message.anchors);
+				editor.setRects(frameId, message.hover, message.selected, message.parents, message.focus, message.anchors);
 				break;
 			case 'dom-changed':
 				if (message.reason === 'hmr') {
@@ -202,8 +202,8 @@
 		const path = await client.hit(x, y);
 		if (seq !== hoverSeq) return;
 		lastHit = path;
-		// ⌥ measures to whatever is under the pointer, so pick the innermost layer.
-		const id = editor.pick(path, event.metaKey || event.ctrlKey || event.altKey ? 'deep' : 'click', frameId);
+		// Hover shows what a click would select: the innermost layer, or with ⌘ the container.
+		const id = editor.pick(path, (event.metaKey || event.ctrlKey) && !event.altKey ? 'container' : 'click', frameId);
 		editor.setHover(frameId, id);
 	}
 
@@ -220,7 +220,7 @@
 		const { x, y } = toGuest(event);
 		const path = await client.hit(x, y);
 		lastHit = path;
-		const gesture = event.metaKey || event.ctrlKey ? 'deep' : event.detail >= 2 ? 'double' : 'click';
+		const container = event.metaKey || event.ctrlKey;
 		if (editor.textEditing) {
 			// Clicking anywhere commits the text being typed; a click inside it keeps editing.
 			if (editor.textEditing.frameId === frameId && path.includes(editor.textEditing.id)) return;
@@ -228,11 +228,13 @@
 		}
 		// Double-clicking the selected text layer edits it in place, like Framer.
 		const current = editor.selected;
-		if (gesture === 'double' && current?.textEditable && editor.selection.frameId === frameId && path.includes(current.id)) {
+		if (!container && event.detail >= 2 && current?.textEditable && editor.selection.frameId === frameId && path.includes(current.id)) {
 			void editor.startTextEdit(frameId, current.id);
 			return;
 		}
-		await editor.selectFromHit(frameId, path, gesture, event.shiftKey);
+		// Clicking the dimmed page around a component edited in place goes back to the page, like Framer.
+		if (path.length === 0 && editor.inPlace && !isComponentCanvas) return editor.exitInPlace();
+		await editor.selectFromHit(frameId, path, container ? 'container' : 'click', event.shiftKey);
 	}
 
 	// ------------------------------------------------------------ drawing
@@ -373,7 +375,7 @@
 		editor.openComment = null;
 		const p = toGuest(event);
 		const path = await client.hit(p.x, p.y);
-		const id = editor.pick(path, 'deep', frameId);
+		const id = editor.pick(path, 'click', frameId);
 		const [info] = id ? await client.describe([id]) : [];
 		if (!info?.loc) return void editor.toast(m.comment_no_layer());
 		const twins = await client.findLoc({ ...info.loc, tag: info.componentTag ?? info.tag });
@@ -806,6 +808,18 @@
 						{Math.round(drawBox.width)} × {Math.round(drawBox.height)}
 					</span>
 				</div>
+			{/if}
+			{#if !isComponentCanvas && editor.focusRects[frameId]?.length}
+				<svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+					<path fill="rgba(0,0,0,0.4)" fill-rule="evenodd"
+						d="M0 0H100000V100000H0Z {editor.focusRects[frameId].map((r) => `M${r.x} ${r.y}h${r.width}v${r.height}h${-r.width}Z`).join(' ')}" />
+				</svg>
+			{/if}
+			{#if designMode && !dragging}
+				{#each Object.entries(editor.parentRects[frameId] ?? {}) as [id, rect] (id)}
+					<div class="absolute" style="left:{rect.x}px; top:{rect.y}px; width:{rect.width}px; height:{rect.height}px;
+						box-shadow: inset 0 0 0 calc(1px * var(--inv)) color-mix(in srgb, var(--cd-accent) 45%, transparent);"></div>
+				{/each}
 			{/if}
 			{#if hoverRect && designMode && !Object.keys(selectedRects).includes(editor.hover?.id ?? '')}
 				<div
