@@ -1,7 +1,8 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
 
-const workspacePackages = ['@codesigner/protocol', '@codesigner/engine'];
+// Bundled into main: the packaged app ships without node_modules.
+const workspacePackages = ['@codesigner/protocol', '@codesigner/engine', 'fix-path'];
 
 export default defineConfig({
 	main: {

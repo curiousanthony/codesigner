@@ -51,6 +51,15 @@ bun run check       # type checks
 cd apps/desktop && node e2e/smoke.ts   # end-to-end run in Electron (editor dev server must be running)
 ```
 
+### Mac app
+
+```bash
+cd apps/desktop && bun run package   # dist/mac-arm64/Codesigner.app and a .dmg (unsigned for now)
+cd apps/desktop && bun run icon      # re-render build/icon.icns from build/icon/icon.html
+```
+
+The packaged app bundles the editor UI, so rebuild it to pick up changes.
+
 ## License
 
 [MIT](LICENSE)

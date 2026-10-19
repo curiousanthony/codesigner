@@ -1,0 +1,30 @@
+# Packages Codesigner.app (bun run package). The main process and preloads are
+# fully bundled by electron-vite, so the app ships without node_modules; the
+# editor UI (apps/editor adapter-static build) is served from Resources/editor.
+appId: dev.codesigner.app
+productName: Codesigner
+copyright: Copyright © 2026 Codesigner
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: ../editor/build
+    to: editor
+npmRebuild: false
+asar: true
+mac:
+  category: public.app-category.graphics-design
+  icon: build/icon.icns
+  target:
+    - target: dir
+    - target: dmg
+  # Unsigned local builds; signing and notarization come with releases.
+  identity: null
+  hardenedRuntime: false
+  extendInfo:
+    NSHumanReadableCopyright: Copyright © 2026 Codesigner
+dmg:
+  title: Codesigner

@@ -8,19 +8,22 @@
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
 		"build": "electron-vite build",
-		"check": "tsc --noEmit -p tsconfig.json"
+		"check": "tsc --noEmit -p tsconfig.json",
+		"icon": "sh scripts/icon.sh",
+		"package": "cd ../editor && bun run build && cd ../desktop && bun run build && electron-builder --mac"
 	},
 	"devDependencies": {
+		"@codesigner/engine": "workspace:*",
+		"@codesigner/protocol": "workspace:*",
 		"@types/bun": "^1.4.3",
 		"@types/node": "^24",
 		"electron": "44.9.0",
+		"electron-builder": "26.0.12",
 		"electron-vite": "6.0.0",
+		"fix-path": "5.0.0",
 		"playwright-core": "1.64.1",
 		"typescript": "~6.0.3"
 	},
-	"dependencies": {
-		"fix-path": "5.0.0",
-		"@codesigner/protocol": "workspace:*",
-		"@codesigner/engine": "workspace:*"
-	}
+	"productName": "Codesigner",
+	"author": "Codesigner"
 }
