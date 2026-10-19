@@ -195,6 +195,19 @@
 		return edit;
 	}
 
+	/** Both axes at once (corner handles): each axis keeps only its own classes from a split `size-*`. */
+	function resizeEdit(width: number | null, height: number | null): ClassEdit {
+		if (width === null) return sizeEdit('height', 'fixed', height ?? 0);
+		if (height === null) return sizeEdit('width', 'fixed', width);
+		const w = sizeEdit('width', 'fixed', width);
+		const h = sizeEdit('height', 'fixed', height);
+		const is = (axis: string) => (t: string) => parseToken(t).utility.startsWith(axis);
+		return {
+			remove: [...new Set([...w.remove, ...h.remove])],
+			add: [...w.add.filter((t) => !is('h-')(t)), ...h.add.filter((t) => !is('w-')(t))]
+		};
+	}
+
 	function relativeValue(axis: 'width' | 'height'): number {
 		if (!info || !c) return 0;
 		const own = px(axis === 'width' ? c.width : c.height);
@@ -258,7 +271,13 @@
 	$effect(() => {
 		const commands: NonNullable<typeof editor.styleCommands> = {
 			padding: (side, value, commit) => (commit ? setPadding(side, value, false) : preview(paddingEdit(side, value))),
-			gap: (value, commit) => (commit ? apply(m.edit_gap(), set('gap', [spacing('gap', value)])) : preview(set('gap', [spacing('gap', value)])))
+			gap: (value, commit) => (commit ? apply(m.edit_gap(), set('gap', [spacing('gap', value)])) : preview(set('gap', [spacing('gap', value)]))),
+			size: (width, height, commit) => {
+				const edit = resizeEdit(width, height);
+				if (commit) void apply(width !== null && height !== null ? m.edit_size() : width !== null ? m.edit_width() : m.edit_height(), edit);
+				else preview(edit);
+			},
+			fit: (axis) => void apply(axis === 'width' ? m.edit_width() : m.edit_height(), sizeEdit(axis, 'fit', 0))
 		};
 		editor.styleCommands = commands;
 		// A panel replaced by a newer one (hot reload, remount) must not unregister the newer one's commands.

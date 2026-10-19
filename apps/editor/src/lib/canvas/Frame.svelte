@@ -429,10 +429,11 @@
 
 	// --------------------------------------------- padding / gap handles
 	type HandleKind = 'top' | 'right' | 'bottom' | 'left' | 'gap';
-	const handleLayer = $derived.by(() => {
+	/** The one selected layer, when the canvas handles can style it (resize, padding, gap). */
+	const styleTarget = $derived.by(() => {
 		const info = editor.selected;
 		if (!designMode || dragging || !editor.styleCommands || editor.selection.frameId !== frameId || editor.selection.ids.length !== 1) return null;
-		if (!info?.editable || !info.loc || isComponentCanvas) return null;
+		if (!info?.editable || !info.loc || isComponentCanvas || editor.textEditing) return null;
 		// A component that doesn't take `class` would ignore the edit: style it inside ("Edit component").
 		if (info.kind === 'instance') {
 			const tag = info.componentTag ?? '';
@@ -440,7 +441,12 @@
 			if (!component?.acceptsClass) return null;
 		}
 		const rect = selectedRects[info.id];
-		if (!rect || rect.width * scale < 60 || rect.height * scale < 36) return null;
+		return rect ? { info, rect } : null;
+	});
+	const handleLayer = $derived.by(() => {
+		if (!styleTarget) return null;
+		const { info, rect } = styleTarget;
+		if (rect.width * scale < 60 || rect.height * scale < 36) return null;
 		const c = info.computed;
 		const layout = /flex|grid/.test(c.display);
 		const p = c.padding;
@@ -505,6 +511,73 @@
 		};
 		el.addEventListener('pointermove', move);
 		el.addEventListener('pointerup', up);
+	}
+
+	// ------------------------------------------------------ resize handles
+	/** Framer: drag an edge or corner of the selection to give it a fixed size. */
+	type ResizeKind = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+	const RESIZE_CURSOR: Record<ResizeKind, string> = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize' };
+	const resizeZones = $derived.by(() => {
+		if (!styleTarget || handleDrag) return [];
+		const r = styleTarget.rect;
+		if (r.width * scale < 12 || r.height * scale < 12) return [];
+		const t = 8 / scale; // hit thickness: 8 screen px across the outline
+		const c = 12 / scale; // corner hit size
+		const zones: { kind: ResizeKind; box: Rect }[] = [
+			{ kind: 'n', box: { x: r.x + c / 2, y: r.y - t / 2, width: r.width - c, height: t } },
+			{ kind: 's', box: { x: r.x + c / 2, y: r.y + r.height - t / 2, width: r.width - c, height: t } },
+			{ kind: 'w', box: { x: r.x - t / 2, y: r.y + c / 2, width: t, height: r.height - c } },
+			{ kind: 'e', box: { x: r.x + r.width - t / 2, y: r.y + c / 2, width: t, height: r.height - c } },
+			{ kind: 'nw', box: { x: r.x - c / 2, y: r.y - c / 2, width: c, height: c } },
+			{ kind: 'ne', box: { x: r.x + r.width - c / 2, y: r.y - c / 2, width: c, height: c } },
+			{ kind: 'sw', box: { x: r.x - c / 2, y: r.y + r.height - c / 2, width: c, height: c } },
+			{ kind: 'se', box: { x: r.x + r.width - c / 2, y: r.y + r.height - c / 2, width: c, height: c } }
+		];
+		return zones;
+	});
+	let resizing = $state<{ width: number; height: number } | null>(null);
+
+	function onresizedown(event: PointerEvent, kind: ResizeKind) {
+		if (!styleTarget || event.button !== 0) return;
+		event.stopPropagation();
+		event.preventDefault();
+		const el = event.currentTarget as HTMLElement;
+		el.setPointerCapture(event.pointerId);
+		const start = { x: event.clientX, y: event.clientY, width: styleTarget.rect.width, height: styleTarget.rect.height };
+		const horizontal = kind.includes('e') || kind.includes('w');
+		const vertical = kind.includes('n') || kind.includes('s');
+		let size: { width: number | null; height: number | null } = { width: null, height: null };
+		const move = (e: PointerEvent) => {
+			const dx = ((e.clientX - start.x) / scale) * (kind.includes('w') ? -1 : 1);
+			const dy = ((e.clientY - start.y) / scale) * (kind.includes('n') ? -1 : 1);
+			const snap = (v: number) => Math.max(0, e.altKey ? Math.round(v) : Math.round(v / 4) * 4);
+			let width = horizontal ? snap(start.width + dx) : null;
+			let height = vertical ? snap(start.height + dy) : null;
+			// ⇧ on a corner keeps the proportions, following the axis that moved most.
+			if (e.shiftKey && width !== null && height !== null && start.width > 0 && start.height > 0) {
+				const ratio = start.width / start.height;
+				if (Math.abs(dx) * start.height >= Math.abs(dy) * start.width) height = snap(width / ratio);
+				else width = snap(height * ratio);
+			}
+			size = { width, height };
+			resizing = { width: width ?? Math.round(start.width), height: height ?? Math.round(start.height) };
+			editor.styleCommands?.size(width, height, false);
+		};
+		const up = () => {
+			el.removeEventListener('pointermove', move);
+			el.removeEventListener('pointerup', up);
+			resizing = null;
+			const changed = (size.width !== null && size.width !== Math.round(start.width)) || (size.height !== null && size.height !== Math.round(start.height));
+			if (!changed) return editor.clearPreview();
+			editor.styleCommands?.size(size.width, size.height, true);
+		};
+		el.addEventListener('pointermove', move);
+		el.addEventListener('pointerup', up);
+	}
+
+	function onresizedouble(kind: ResizeKind) {
+		if (kind.includes('e') || kind.includes('w')) editor.styleCommands?.fit('width');
+		if (kind.includes('n') || kind.includes('s')) editor.styleCommands?.fit('height');
 	}
 
 	const label = $derived(breakpointLabel(breakpoint));
@@ -778,6 +851,19 @@
 					</span>
 				{/if}
 			{/each}
+			{#each resizeZones as zone (zone.kind)}
+				<div
+					class="pointer-events-auto absolute"
+					style="left:{zone.box.x}px; top:{zone.box.y}px; width:{zone.box.width}px; height:{zone.box.height}px; cursor:{RESIZE_CURSOR[zone.kind]};"
+					role="slider"
+					tabindex="-1"
+					aria-label={m.label_resize()}
+					aria-valuenow={Math.round(styleTarget?.rect.width ?? 0)}
+					data-resize={zone.kind}
+					onpointerdown={(e) => onresizedown(e, zone.kind)}
+					ondblclick={() => onresizedouble(zone.kind)}
+				></div>
+			{/each}
 			{#if (drawing && dropPreview) || componentDrop}
 				{@const target = (componentDrop ?? dropPreview)!}
 				{@const p = target.parentRect}
@@ -846,7 +932,7 @@
 						class="absolute top-full left-1/2 mt-1 origin-top rounded-[4px] px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white tabular-nums"
 						style="background:{color}; transform: translateX(-50%) scale(var(--inv)); margin-top: calc(6px * var(--inv));"
 					>
-						{Math.round(rect.width)} × {Math.round(rect.height)}
+						{resizing ? `${resizing.width} × ${resizing.height}` : `${Math.round(rect.width)} × ${Math.round(rect.height)}`}
 					</span>
 				</div>
 			{/each}

@@ -131,10 +131,11 @@ const server = createServer(async (req, res) => {
 				break;
 			}
 			case '/drag': {
-				// {"from":{"x":1,"y":2},"to":{"x":3,"y":4},"shot":"name"} — optional screenshot before releasing.
-				const { from, to, steps = 12, shot } = json();
+				// {"from":{"x":1,"y":2},"to":{"x":3,"y":4},"shot":"name","keys":["Shift"]} — optional screenshot before releasing, keys held during the drag.
+				const { from, to, steps = 12, shot, keys = [] } = json();
 				await page.mouse.move(from.x, from.y);
 				await page.mouse.down();
+				for (const key of keys) await page.keyboard.down(key);
 				await page.mouse.move(to.x, to.y, { steps });
 				if (shot) {
 					await page.waitForTimeout(150);
@@ -142,6 +143,7 @@ const server = createServer(async (req, res) => {
 					writeFileSync(join(shots, `${shot}.png`), Buffer.from(png, 'base64'));
 				}
 				await page.mouse.up();
+				for (const key of keys) await page.keyboard.up(key);
 				break;
 			}
 			case '/press':
