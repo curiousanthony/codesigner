@@ -9,6 +9,7 @@ import type {
 	DevServerState,
 	EditOp,
 	EditRequest,
+	EditResult,
 	ElementInfo,
 	LayerNode,
 	NodeId,
@@ -17,6 +18,8 @@ import type {
 	Rect,
 	RecentProject,
 	RouteInfo,
+	SourceBranch,
+	SourceLoc,
 	UpdateInfo
 } from '@codesigner/protocol';
 import { errorMessage, inDesktop, invoke, on } from '#lib/api.js';
@@ -24,10 +27,33 @@ import type { BridgeClient } from '#lib/canvas/bridge-client.js';
 import { parentOf, pickLayer } from '#lib/canvas/selection.js';
 import { buildUrl, matchRoute } from './routes';
 import { buildCanvasSpec, type CanvasSpec } from './component-canvas';
+import { m } from '#lib/paraglide/messages.js';
+
+/** The project open in this window, kept across reloads of the window (not across launches). */
+const session = {
+	get: () => {
+		try {
+			return sessionStorage.getItem('codesigner:project');
+		} catch {
+			return null;
+		}
+	},
+	set: (root: string | null) => {
+		try {
+			if (root) sessionStorage.setItem('codesigner:project', root);
+			else sessionStorage.removeItem('codesigner:project');
+		} catch {
+			// storage unavailable
+		}
+	}
+};
 
 export type LeftTab = 'pages' | 'layers' | 'assets';
 export type RightTab = 'agent' | 'style';
-export type Tool = 'select' | 'hand' | 'comment';
+export type DrawTool = 'stack' | 'frame' | 'grid' | 'text';
+export type Tool = 'select' | 'hand' | 'comment' | DrawTool;
+export const DRAW_TOOLS: readonly DrawTool[] = ['stack', 'frame', 'grid', 'text'];
+export const isDrawTool = (tool: Tool): tool is DrawTool => (DRAW_TOOLS as readonly Tool[]).includes(tool);
 
 export interface Selection {
 	frameId: string | null;
@@ -56,6 +82,8 @@ class EditorState {
 	opening = $state(false);
 	openError = $state<string | null>(null);
 	branches = $state<DesignBranch[]>([]);
+	/** Set when a project opens with no design branch yet: the user picks where to start from. */
+	startChoice = $state<{ branches: SourceBranch[]; defaultBase: string } | null>(null);
 	/** Working copy the canvas shows and edits (main checkout or a design worktree). */
 	worktree = $state<string | null>(null);
 	devServer = $state<DevServerState | null>(null);
@@ -101,6 +129,9 @@ class EditorState {
 	codeCommands: { undo: () => void; redo: () => void; hasFocus: () => boolean } | null = null;
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
+
+	/** A text layer being edited in place on the canvas. */
+	textEditing = $state<{ frameId: string; id: NodeId; loc: SourceLoc } | null>(null);
 
 	busy = $state(false);
 	toasts = $state<Toast[]>([]);
@@ -190,6 +221,9 @@ class EditorState {
 		this.appInfo = info;
 		this.recent = recent;
 		void invoke('app:check-update').then((u) => (this.update = u));
+		// The window reloaded (e.g. a dev hot reload): reopen what was open.
+		const reopen = session.get();
+		if (reopen) void this.openProject(reopen);
 	}
 
 	toast(text: string, kind: Toast['kind'] = 'info') {
@@ -210,14 +244,21 @@ class EditorState {
 		try {
 			const project = await invoke('project:open', root);
 			this.project = project;
+			session.set(root);
 			this.recent = await invoke('project:recent');
 			this.branches = project.isGitRepo ? await invoke('branch:list', project.root) : [];
-			let worktree = project.root;
+			this.startChoice = null;
 			if (project.settings.versioning === 'branches' && project.isGitRepo) {
 				const design = this.branches.find((b) => !b.isMainCheckout && b.name.startsWith('design/'));
-				worktree = design ? design.worktree : (await this.createBranch('design-session', true))?.worktree ?? project.root;
+				if (!design) {
+					// First design session: ask which branch to start from (see StartDesign.svelte).
+					this.startChoice = await invoke('branch:sources', project.root);
+					return;
+				}
+				await this.switchWorktree(design.worktree);
+				return;
 			}
-			await this.switchWorktree(worktree);
+			await this.switchWorktree(project.root);
 		} catch (error) {
 			this.openError = errorMessage(error);
 			this.project = null;
@@ -227,7 +268,9 @@ class EditorState {
 	}
 
 	closeProject() {
+		session.set(null);
 		this.exitComponent();
+		this.startChoice = null;
 		if (this.worktree) void invoke('devserver:stop', this.worktree);
 		this.project = null;
 		this.worktree = null;
@@ -244,10 +287,50 @@ class EditorState {
 		this.project = { ...this.project, settings };
 	}
 
-	async createBranch(name: string, silent = false): Promise<DesignBranch | null> {
+	/** Starts designing on a new design branch cut from `base` (the first-open choice). */
+	async startDesign(base: string, name: string): Promise<boolean> {
+		const branch = await this.createBranch(name, false, base);
+		if (!branch) return false;
+		this.startChoice = null;
+		await this.switchWorktree(branch.worktree);
+		return true;
+	}
+
+	/** Edits the main checkout directly, on whatever branch it has checked out. */
+	async startDirect() {
+		if (!this.project) return;
+		this.startChoice = null;
+		await this.updateSettings({ versioning: 'direct' });
+		await this.switchWorktree(this.project.root);
+	}
+
+	/** Dismisses the start dialog: back to what was open, or closes a project that never opened. */
+	cancelStart() {
+		this.startChoice = null;
+		if (!this.worktree) this.closeProject();
+		else if (this.worktree === this.project?.root) void this.updateSettings({ versioning: 'direct' });
+	}
+
+	/** Switches between design branches and editing the main checkout, and moves there. */
+	async setVersioning(mode: ProjectSettings['versioning']) {
+		if (!this.project) return;
+		await this.updateSettings({ versioning: mode });
+		if (mode === 'direct') return void (await this.switchWorktree(this.project.root));
+		const design = this.branches.find((b) => !b.isMainCheckout && b.name.startsWith('design/'));
+		if (design) await this.switchWorktree(design.worktree);
+		else this.startChoice = await invoke('branch:sources', this.project.root);
+	}
+
+	/** Branches a new design branch can start from. */
+	async sourceBranches(): Promise<{ branches: SourceBranch[]; defaultBase: string }> {
+		if (!this.project?.isGitRepo) return { branches: [], defaultBase: '' };
+		return invoke('branch:sources', this.project.root);
+	}
+
+	async createBranch(name: string, silent = false, from?: string): Promise<DesignBranch | null> {
 		if (!this.project) return null;
 		try {
-			const branch = await invoke('branch:create', this.project.root, name);
+			const branch = await invoke('branch:create', this.project.root, name, from);
 			this.branches = await invoke('branch:list', this.project.root);
 			if (!silent) this.toast(`Created ${branch.name}`, 'success');
 			return branch;
@@ -560,6 +643,31 @@ class EditorState {
 		}
 	}
 
+	/** Edits a text layer in place (double-click, or right after drawing it with T). */
+	startTextEdit(frameId: string, id: NodeId) {
+		const frame = this.frames.get(frameId);
+		const info = this.selection.frameId === frameId ? this.selection.infos.find((i) => i.id === id) : null;
+		if (!frame || !info?.loc || !info.textEditable) return false;
+		this.textEditing = { frameId, id, loc: { ...info.loc, tag: info.tag } };
+		frame.focus();
+		frame.send({ type: 'edit-text', id });
+		return true;
+	}
+
+	endTextEdit(cancel = false) {
+		if (!this.textEditing) return;
+		this.frames.get(this.textEditing.frameId)?.send({ type: 'end-edit-text', cancel });
+	}
+
+	async onTextEdited(frameId: string, id: NodeId, text: string, cancelled: boolean) {
+		const editing = this.textEditing;
+		if (!editing || editing.frameId !== frameId || editing.id !== id) return;
+		this.textEditing = null;
+		// Give the keyboard back to the editor, or shortcuts would keep going to the frame.
+		if (document.activeElement?.tagName === 'WEBVIEW') (document.activeElement as HTMLElement).blur();
+		if (!cancelled) await this.edit(m.edit_text(), [{ type: 'text', target: editing.loc, text }]);
+	}
+
 	async selectParent() {
 		const id = this.selection.ids[0];
 		if (!id || !this.selection.frameId) return;
@@ -687,22 +795,28 @@ class EditorState {
 
 	// ----------------------------------------------------------- edits
 	/** Serializes edits and waits for the page to hot-reload between them. */
-	edit(label: string, ops: EditOp[], options: { coalesce?: boolean } = {}): Promise<boolean> {
-		const run = async () => {
-			if (!this.worktree || ops.length === 0) return false;
+	async edit(label: string, ops: EditOp[], options: { coalesce?: boolean } = {}): Promise<boolean> {
+		const result = await this.editWithResult(label, ops, options);
+		return !!result && result.changes.length > 0;
+	}
+
+	/** Like `edit`, returning the engine's result (e.g. where inserted layers landed); null on failure. */
+	editWithResult(label: string, ops: EditOp[], options: { coalesce?: boolean } = {}): Promise<EditResult | null> {
+		const run = async (): Promise<EditResult | null> => {
+			if (!this.worktree || ops.length === 0) return null;
 			await this.waitForHmr();
 			const request: EditRequest = { label, ops, coalesce: options.coalesce };
 			try {
 				const result = await invoke('source:edit', this.worktree, request);
 				if (!result.ok) {
 					this.toast(result.error ?? 'Edit failed', 'error');
-					return false;
+					return null;
 				}
 				for (const warning of result.warnings ?? []) this.toast(warning, 'info');
-				return result.changes.length > 0;
+				return result;
 			} catch (error) {
 				this.toast(errorMessage(error), 'error');
-				return false;
+				return null;
 			}
 		};
 		const next = this.editChain.then(run, run);

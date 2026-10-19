@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { editor, type LeftTab } from '#lib/state/editor.svelte.js';
-	import { deleteSelection, duplicateSelection, insertLayer, unwrapSelection, wrapSelection } from '#lib/state/commands.js';
+	import { editor, isDrawTool, type DrawTool, type LeftTab } from '#lib/state/editor.svelte.js';
+	import { deleteSelection, duplicateSelection, unwrapSelection, wrapSelection } from '#lib/state/commands.js';
 	import { on } from '#lib/api.js';
 	import Welcome from '#lib/Welcome.svelte';
 	import TopBar from '#lib/TopBar.svelte';
 	import Toasts from '#lib/Toasts.svelte';
+	import StartDesign from '#lib/StartDesign.svelte';
 	import Canvas from '#lib/canvas/Canvas.svelte';
 	import CodePanel from '#lib/code/CodePanel.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
@@ -24,6 +25,13 @@
 	};
 	/** Typing in a field: canvas shortcuts stay off. `target` covers fields that blur themselves on Enter. */
 	const isTyping = (event?: Event) => isField(document.activeElement) || (!!event && isField(event.target));
+
+	/** S / F / T / ⇧G pick a draw tool (pressing it again goes back to Select). */
+	function useTool(tool: DrawTool) {
+		if (editor.editingComponent) return;
+		editor.setMode('design');
+		editor.tool = editor.tool === tool ? 'select' : tool;
+	}
 
 	function runCommand(command: string) {
 		switch (command) {
@@ -71,7 +79,7 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
-		if (!editor.project || isTyping(event)) return;
+		if (!editor.project || editor.startChoice || isTyping(event)) return;
 		const mod = event.metaKey || event.ctrlKey;
 		if (event.code === 'Space' && !event.repeat) {
 			editor.spaceHeld = true;
@@ -93,22 +101,24 @@
 		if (mod || event.altKey) return;
 		switch (event.key) {
 			case 's':
-			case 'S':
-				if (event.shiftKey) return;
-				if (editor.selection.ids.length) void wrapSelection('stack');
-				else void insertLayer('stack');
+				useTool('stack');
 				break;
 			case 'f':
-				void insertLayer('frame');
+				useTool('frame');
 				break;
 			case 'G':
-				if (event.shiftKey) void insertLayer('grid');
+				if (event.shiftKey) useTool('grid');
 				break;
 			case 't':
-				void insertLayer('text');
+				useTool('text');
+				break;
+			case 'A':
+				// ⇧A: put the selection inside a new Stack
+				if (event.shiftKey) void wrapSelection('stack');
 				break;
 			case 'Escape':
-				if (editor.selection.ids.length) void editor.selectParent();
+				if (isDrawTool(editor.tool)) editor.tool = 'select';
+				else if (editor.selection.ids.length) void editor.selectParent();
 				else if (editor.scope.length > 1) editor.setScope(['src/routes/']);
 				break;
 			case 'Enter':
@@ -219,6 +229,10 @@
 			</aside>
 		</div>
 	</div>
+{/if}
+
+{#if editor.startChoice}
+	<StartDesign />
 {/if}
 
 <Toasts />

@@ -3,11 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkpoint, createDesignBranch, listBranches, slugifyBranch } from '../src/git';
+import { checkpoint, createDesignBranch, listBranches, listSourceBranches, slugifyBranch, worktreesHome } from '../src/git';
 
 const run = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 const repo = mkdtempSync(join(tmpdir(), 'codesigner-git-'));
-const cleanup: string[] = [repo];
+const cleanup: string[] = [repo, worktreesHome(repo)];
 afterAll(() => cleanup.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 run(repo, 'init', '-q', '-b', 'main');
@@ -40,5 +40,23 @@ describe('design branches', () => {
 		expect(files).toEqual(['page.svelte']);
 		// Only the env file left: nothing to checkpoint.
 		expect(checkpoint(branch.worktree, 'again')).toBeNull();
+	});
+});
+
+describe('source branches', () => {
+	test('lists local branches, then remote-only ones, newest first', () => {
+		run(repo, 'branch', 'feature/login', 'main');
+		run(repo, 'update-ref', 'refs/remotes/origin/main', 'main');
+		run(repo, 'update-ref', 'refs/remotes/origin/hotfix', 'main');
+		run(repo, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+		const branches = listSourceBranches(repo);
+		const names = branches.map((b) => b.name);
+		expect(names).toContain('main');
+		expect(names).toContain('feature/login');
+		expect(names).toContain('origin/hotfix');
+		expect(names).not.toContain('origin/main'); // has a local counterpart
+		expect(names).not.toContain('origin/HEAD');
+		expect(branches.find((b) => b.name === 'main')?.current).toBe(true);
+		expect(names.indexOf('origin/hotfix')).toBeGreaterThan(names.indexOf('feature/login'));
 	});
 });

@@ -27,7 +27,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Layers panel: tree synced with canvas selection, hover, expand/collapse, open in code
 - ✅ Style panel v1: Position, Size, Layout, Styles, Text, component props and `tv()` variants
 - ✅ Engine: `classes` op on static, mixed, `cn()`, array and expression class forms; Tailwind design system validation, conflict removal and ordering
-- ✅ Shortcuts: `S` wraps in a Stack, `⌘↩` Frame, `⌘⌫` unwrap, `⌘D`, `⌫`, `⌘Z` / `⇧⌘Z`, `Esc` parent, `Enter` children, `⌘0/1/2` zoom, space-drag pan, `⌘E` interact mode
+- ✅ Shortcuts: `⇧A` wraps in a Stack (was `S`), `⌘↩` Frame, `⌘⌫` unwrap, `⌘D`, `⌫`, `⌘Z` / `⇧⌘Z`, `Esc` parent, `Enter` children, `⌘0/1/2` zoom, space-drag pan, `⌘E` interact mode
 - ✅ Undo/redo journal across file writes (refuses safely after external edits)
 - ✅ Design tokens: read and edit light/dark values from `app.css` (Assets panel)
 - ✅ i18n wiring (Paraglide): English and French
@@ -38,7 +38,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 2. ✅ Logging in inside the canvas logs in every breakpoint frame and survives restarts (persistent session).
 3. ✅ ⌘-clicking a NavItem selects the instance (its usage in `+layout.svelte`), not its inner `<a>`.
 4. ✅ Changing the sidebar `<nav>` gap to 12 changes only `gap-1` → `gap-3`; the canvas updates through HMR.
-5. ✅ Selecting two siblings and pressing `S` wraps them in `<div class="flex flex-col gap-2">`, indented with the file's tabs.
+5. ✅ Selecting two siblings and pressing `⇧A` (originally `S`) wraps them in `<div class="flex flex-col gap-2">`, indented with the file's tabs.
 6. ✅ `⌘Z` restores the exact previous bytes (git status clean on the real app).
 7. ✅ `/projects/[slug]` appears in Pages with sample-value inputs.
 
@@ -48,8 +48,10 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 
 ## M2 — Full design surface 🚧
 
-- ⬜ Insert menu (`+`): Frame `F`, Stack `S`, Grid `⇧G`, Text `T`, Image; shadcn components from Assets
-- ⬜ Text editing on canvas (double-click), typography controls, text color
+- ✅ Draw tools like Framer: `S` Stack, `F` Frame, `⇧G` Grid, `T` Text (also in the `+` menu). Click or drag inside a container; an insertion line follows its flow (row, column, grid), `{#each}` runs are kept intact, empty layout space draws into the page. Drawn sizes snap to the 4px scale. `⇧A` wraps the selection in a Stack
+- ⬜ Insert: Image; shadcn components from Assets
+- ✅ Text editing on canvas: double-click a selected text layer (or draw one with `T`), type, `↩` commits, `Esc` cancels
+- ⬜ Rich text (inline `<strong>`/links), typography presets
 - ⬜ Drag to reorder in stacks and in the layer tree; delete, duplicate (`⌘D`), copy/paste style
 - ✅ Breakpoint-aware edits with Framer's cascade: an edit applies to that breakpoint and smaller ones, larger frames get pinned (`gap-6` edited on Phone → `gap-3 md:gap-6`); overridden properties highlighted
 - ✅ Per-breakpoint layer trees in the Layers panel (Desktop / Tablet / Phone rows), selection mirrored in every frame, layer click outlines on the canvas
@@ -73,9 +75,10 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ⬜ Props-only components (no `tv()`): sample prop values per cell, required props
 - ⬜ Create a component from the selection (`⌥⌘K`), expose a property (the ⊕ binding)
 
-## M4 — Version control UX ⬜
+## M4 — Version control UX 🚧
 
-- ⬜ Branch menu in the top bar: switch, create, rename, delete design branches; each keeps its own dev server
+- ✅ Pick the branch to start designing from: first open asks (local and remote branches, newest first, or edit the checkout directly); "New design branch…" in the branch menu takes a base too
+- 🚧 Branch menu in the top bar: switch ✅, create ✅, rename, delete design branches; each keeps its own dev server
 - ⬜ Silent checkpoints + version history (`⇧⌘H`) with restore
 - ⬜ "Ship": merge into the base branch or open a PR (`gh`), with a visual diff summary
 - ⬜ Conflict-aware re-sync when files change outside the app (agents, editors, git)

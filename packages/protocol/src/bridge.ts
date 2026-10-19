@@ -144,9 +144,21 @@ export type LayerKind =
 
 export type CanvasMode = 'design' | 'interact' | 'comment';
 
+/** Where a layer drawn or dropped at a point would go: a container and a position among its children. */
+export interface DropTarget {
+	parentId: NodeId;
+	parent: SourceLoc;
+	/** null appends (empty container, or past the last child). */
+	anchor: { target: SourceLoc; position: 'before' | 'after' } | null;
+	parentRect: Rect;
+	/** Insertion indicator (guest viewport px); null when the container is empty. */
+	line: Rect | null;
+}
+
 export type HostToGuest =
 	| { type: 'init'; frameId: string; scope: string[]; mode: CanvasMode }
 	| { type: 'hit'; reqId: number; x: number; y: number }
+	| { type: 'drop-target'; reqId: number; x: number; y: number }
 	| { type: 'describe'; reqId: number; ids: NodeId[] }
 	| { type: 'find-loc'; reqId: number; loc: SourceLoc }
 	| { type: 'highlight'; hover: NodeId | null; selected: NodeId[] }
@@ -158,12 +170,16 @@ export type HostToGuest =
 	| { type: 'clear-preview' }
 	| { type: 'scroll-at'; x: number; y: number; dx: number; dy: number }
 	| { type: 'set-dark'; dark: boolean }
-	| { type: 'navigate'; url: string };
+	| { type: 'navigate'; url: string }
+	/** Edit a text layer in place (contenteditable); the guest answers with `text-edited`. */
+	| { type: 'edit-text'; id: NodeId }
+	| { type: 'end-edit-text'; cancel: boolean };
 
 export type GuestToHost =
 	| { type: 'ready'; url: string; title: string; svelteDev: boolean }
 	/** Layer ids from the root to the deepest layer under the point. */
 	| { type: 'hit-result'; reqId: number; path: NodeId[] }
+	| { type: 'drop-result'; reqId: number; target: DropTarget | null }
 	| { type: 'described'; reqId: number; elements: ElementInfo[] }
 	| { type: 'found-loc'; reqId: number; ids: NodeId[] }
 	| { type: 'tree'; root: LayerNode | null }
@@ -173,4 +189,5 @@ export type GuestToHost =
 	| { type: 'navigated'; url: string; title: string }
 	| { type: 'scrolled'; consumed: boolean; dx: number; dy: number }
 	| { type: 'key'; key: string; code: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }
-	| { type: 'log'; level: 'info' | 'warn' | 'error'; message: string };
+	| { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
+	| { type: 'text-edited'; id: NodeId; text: string; cancelled: boolean };

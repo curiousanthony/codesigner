@@ -16,14 +16,31 @@
 		X,
 		Code
 	} from '@lucide/svelte';
-	import { editor } from '#lib/state/editor.svelte.js';
-	import { insertLayer, wrapSelection } from '#lib/state/commands.js';
+	import { editor, type DrawTool } from '#lib/state/editor.svelte.js';
+	import { wrapSelection } from '#lib/state/commands.js';
 	import { invoke, errorMessage } from '#lib/api.js';
 	import IconButton from '#lib/ui/IconButton.svelte';
+	import BranchPicker from '#lib/ui/BranchPicker.svelte';
+	import type { SourceBranch } from '@codesigner/protocol';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let menu = $state<'main' | 'insert' | 'layout' | 'branch' | 'ship' | null>(null);
 	let newBranch = $state('');
+	/** "New design branch" view of the branch menu: where it starts from. */
+	let creating = $state(false);
+	let sources = $state<SourceBranch[]>([]);
+	let fromBranch = $state('');
+
+	async function openCreate() {
+		creating = true;
+		const result = await editor.sourceBranches();
+		sources = result.branches;
+		// Default to the base of the branch being designed on, so a new idea starts from the same place.
+		fromBranch = editor.branch?.baseBranch ?? result.defaultBase;
+	}
+	$effect(() => {
+		if (menu !== 'branch') creating = false;
+	});
 	let shipMessage = $state('');
 
 	const isMac = $derived(editor.appInfo?.platform === 'darwin');
@@ -44,6 +61,12 @@
 	);
 	const branchLabel = $derived(editor.branch?.name ?? (editor.project?.isGitRepo ? '…' : m.branch_no_git()));
 
+	/** Picks a draw tool: the next drag or click on the canvas inserts that layer. */
+	function useTool(tool: DrawTool) {
+		editor.setMode('design');
+		editor.tool = editor.tool === tool ? 'select' : tool;
+	}
+
 	function toggle(name: typeof menu) {
 		menu = menu === name ? null : name;
 	}
@@ -51,10 +74,11 @@
 	async function createBranch() {
 		const name = newBranch.trim();
 		if (!name) return;
-		const branch = await editor.createBranch(name);
+		const branch = await editor.createBranch(name, false, fromBranch || undefined);
+		if (!branch) return; // keep the form open: the toast says why (e.g. the name is taken)
 		newBranch = '';
 		menu = null;
-		if (branch) await editor.switchWorktree(branch.worktree);
+		await editor.switchWorktree(branch.worktree);
 	}
 
 	async function checkpoint() {
@@ -115,10 +139,10 @@
 			{#if menu === 'insert'}
 				<div class="absolute top-full left-0 mt-1.5 w-56 rounded-popover bg-popover p-1 shadow-popover" role="menu">
 					<p class="px-2.5 pt-1.5 pb-1 text-[11px] text-muted">{m.insert_hint()}</p>
-					{@render item(m.layer_stack(), 'S', () => insertLayer('stack'), Rows3)}
-					{@render item(m.layer_frame(), 'F', () => insertLayer('frame'), Square)}
-					{@render item(m.layer_grid(), '⇧G', () => insertLayer('grid'), Grid2x2)}
-					{@render item(m.layer_text(), 'T', () => insertLayer('text'), Type)}
+					{@render item(m.layer_stack(), 'S', () => useTool('stack'), Rows3)}
+					{@render item(m.layer_frame(), 'F', () => useTool('frame'), Square)}
+					{@render item(m.layer_grid(), '⇧G', () => useTool('grid'), Grid2x2)}
+					{@render item(m.layer_text(), 'T', () => useTool('text'), Type)}
 				</div>
 			{/if}
 		</div>
@@ -130,14 +154,14 @@
 			{#if menu === 'layout'}
 				<div class="absolute top-full left-0 mt-1.5 w-60 rounded-popover bg-popover p-1 shadow-popover" role="menu">
 					<p class="px-2.5 pt-1.5 pb-1 text-[11px] text-muted">{m.wrap_hint()}</p>
-					{@render item(m.wrap_stack(), 'S', () => wrapSelection('stack'), Rows3)}
+					{@render item(m.wrap_stack(), '⇧A', () => wrapSelection('stack'), Rows3)}
 					{@render item(m.wrap_frame(), '⌘↩', () => wrapSelection('frame'), Square)}
 					{@render item(m.wrap_grid(), '', () => wrapSelection('grid'), Grid2x2)}
 				</div>
 			{/if}
 		</div>
 
-		<IconButton label={m.tool_text()} onclick={() => insertLayer('text')}>
+		<IconButton label={m.tool_text()} active={editor.tool === 'text'} onclick={() => useTool('text')}>
 			<Type class="size-[18px]" strokeWidth={1.5} />
 		</IconButton>
 	</div>
@@ -177,18 +201,35 @@
 						</button>
 					{/each}
 					{#if editor.project?.isGitRepo}
-						<form class="mt-1.5 flex gap-1 border-t border-divider pt-1.5" onsubmit={(e) => { e.preventDefault(); void createBranch(); }}>
-							<input class="h-7 min-w-0 flex-1 rounded-[6px] bg-control px-2 outline-none" placeholder={m.branch_new_placeholder()} bind:value={newBranch} />
-							<button type="submit" class="h-7 rounded-[6px] bg-accent px-2.5 text-white disabled:opacity-50" disabled={!newBranch.trim()}>{m.branch_create()}</button>
-						</form>
-						<label class="mt-1.5 flex items-center gap-2 px-2 py-1.5 text-[11px] text-label">
-							<input
-								type="checkbox"
-								checked={editor.project?.settings.versioning === 'direct'}
-								onchange={(e) => editor.updateSettings({ versioning: (e.currentTarget as HTMLInputElement).checked ? 'direct' : 'branches' })}
-							/>
-							{m.branch_direct_mode()}
-						</label>
+						{#if creating}
+							<form class="mt-1.5 flex flex-col gap-2 border-t border-divider px-0.5 pt-2" onsubmit={(e) => { e.preventDefault(); void createBranch(); }}>
+								<span class="flex h-7 items-center rounded-[6px] bg-control px-2">
+									<span class="text-muted">design/</span>
+									<!-- svelte-ignore a11y_autofocus -->
+									<input class="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted" placeholder={m.branch_new_placeholder()} bind:value={newBranch} autofocus />
+								</span>
+								<span class="px-1 text-[11px] font-medium text-label">{m.branch_start_from()}</span>
+								<BranchPicker branches={sources} value={fromBranch} onchange={(b) => (fromBranch = b)} height={200} />
+								<div class="flex gap-1">
+									<button type="button" class="h-7 rounded-[6px] px-2.5 text-label hover:bg-control" onclick={() => (creating = false)}>{m.branch_back()}</button>
+									<span class="flex-1"></span>
+									<button type="submit" class="h-7 rounded-[6px] bg-accent px-2.5 text-white disabled:opacity-50" disabled={!newBranch.trim() || !fromBranch}>{m.branch_create()}</button>
+								</div>
+							</form>
+						{:else}
+							<button type="button" class="mt-1 flex h-8 w-full items-center gap-2 rounded-[6px] border-t border-divider px-2 text-left text-accent hover:bg-control" onclick={openCreate}>
+								<Plus class="size-3.5" />
+								{m.branch_new()}
+							</button>
+							<label class="mt-0.5 flex items-center gap-2 px-2 py-1.5 text-[11px] text-label">
+								<input
+									type="checkbox"
+									checked={editor.project?.settings.versioning === 'direct'}
+									onchange={(e) => editor.setVersioning((e.currentTarget as HTMLInputElement).checked ? 'direct' : 'branches')}
+								/>
+								{m.branch_direct_mode()}
+							</label>
+						{/if}
 					{/if}
 				</div>
 			{/if}

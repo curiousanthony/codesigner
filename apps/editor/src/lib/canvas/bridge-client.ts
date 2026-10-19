@@ -1,5 +1,6 @@
 import {
 	BRIDGE_CHANNEL,
+	type DropTarget,
 	type ElementInfo,
 	type GuestToHost,
 	type HostToGuest,
@@ -81,6 +82,16 @@ export class BridgeClient {
 	async hit(x: number, y: number): Promise<NodeId[]> {
 		const reply = await this.request<Extract<GuestToHost, { type: 'hit-result' }>>({ type: 'hit', x, y }, 800);
 		return reply?.path ?? [];
+	}
+
+	/** Gives the frame keyboard focus (for typing into a text layer edited in place). */
+	focus() {
+		this.webview.focus();
+	}
+
+	async dropTarget(x: number, y: number): Promise<DropTarget | null> {
+		const reply = await this.request<Extract<GuestToHost, { type: 'drop-result' }>>({ type: 'drop-target', x, y }, 800);
+		return reply?.target ?? null;
 	}
 
 	async describe(ids: NodeId[]): Promise<ElementInfo[]> {

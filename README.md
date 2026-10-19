@@ -15,7 +15,7 @@ Designing in a separate prototype tool means re-implementing every design in cod
 - **Layers, Pages, Assets:** all routes (route groups and `[slug]` routes with sample values), the layer tree of the current page, your `src/lib` components with their `tv()` variants, and your design tokens from `app.css`, editable for light and dark.
 - **Style panel:** Position, Size (Fixed / Fill / Fit / Relative / Viewport), Layout (Stack / Grid, direction, distribute, align, wrap, gap, padding), Styles (opacity, visibility, fill, overflow, radius, border), Text, and component props.
 - **Precise code edits:** only the affected bytes change (class tokens, attributes, text). Classes are validated and ordered with your project's own Tailwind design system, conflicting classes are removed, and the edit targets the responsive variant in effect at the frame's width.
-- **Structure:** `S` wraps the selection in a Stack, `⌘↩` in a Frame, `⌘⌫` removes a wrapper, `⌘D` duplicates, `⌫` deletes, and inserting a Stack, Frame, Grid or Text works too.
+- **Structure:** `⇧A` wraps the selection in a Stack, `⌘↩` in a Frame, `⌘⌫` removes a wrapper, `⌘D` duplicates, `⌫` deletes. `S`, `F`, `⇧G` and `T` pick the Stack, Frame, Grid and Text tools: click or drag inside a container to draw one where you point.
 - **Undo/redo** across file writes, and safe against external edits.
 - **Version control:** by default every design session runs on a `design/*` branch in its own git worktree, with its own dev server. `develop` and `main` are untouched until you ship. You can also edit the current checkout directly.
 - **i18n:** English, with French included.

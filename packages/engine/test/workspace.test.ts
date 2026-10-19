@@ -117,6 +117,16 @@ describe('structure', () => {
 		await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: at('<div class'), index: -1, markup: '<div class="flex flex-col gap-2"></div>' }] });
 		expect(read()).toContain('\t<Child />\n\t<div class="flex flex-col gap-2"></div>\n</div>');
 	});
+
+	test('inserts next to an anchor layer (drawn on the canvas)', async () => {
+		const result = await ws.apply({ label: 'draw', ops: [{ type: 'insert', parent: at('<div class'), index: -1, markup: '<i>drawn</i>', anchor: { target: at('<em'), position: 'before' } }] });
+		expect(result.created).toEqual([at('<i>drawn')]);
+		expect(read()).toMatch(/<\/div>\n\t<i>drawn<\/i>\n\t<em/);
+		await ws.apply({ label: 'draw', ops: [{ type: 'insert', parent: at('<div class'), index: -1, markup: '<u>after</u>', anchor: { target: at('<em'), position: 'after' } }] });
+		expect(read()).toMatch(/<\/em>\n\t<u>after<\/u>\n\t<b/);
+		ws.undo();
+		ws.undo();
+	});
 });
 
 describe('history', () => {

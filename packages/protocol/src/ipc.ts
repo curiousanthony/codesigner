@@ -5,7 +5,8 @@ import type {
 	ProjectInfo,
 	ProjectSettings,
 	RecentProject,
-	RouteInfo
+	RouteInfo,
+	SourceBranch
 } from './project.js';
 import type { CodeWriteRequest, CodeWriteResult, EditRequest, EditResult, ElementSource, FileChange } from './edits.js';
 import type { DesignTokens, TokenEdit } from './tokens.js';
@@ -57,6 +58,8 @@ export interface InvokeMap {
 	'canvas:force-states': (webContentsId: number, rules: { selector: string; states: string[] }[]) => boolean;
 
 	'branch:list': (root: string) => DesignBranch[];
+	/** Branches to start a design from, most recently committed first, plus the suggested default. */
+	'branch:sources': (root: string) => { branches: SourceBranch[]; defaultBase: string };
 	'branch:create': (root: string, name: string, from?: string) => DesignBranch;
 	'branch:checkpoint': (worktree: string, message: string) => string | null;
 
@@ -112,6 +115,7 @@ export const INVOKE_CHANNELS = [
 	'canvas:remove-isolation',
 	'canvas:force-states',
 	'branch:list',
+	'branch:sources',
 	'branch:create',
 	'branch:checkpoint',
 	'devserver:start',

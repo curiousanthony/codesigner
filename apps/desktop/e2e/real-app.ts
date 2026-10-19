@@ -36,6 +36,8 @@ const E = <T>(fn: string) => page.evaluate(`(async () => { const e = window.__ed
 
 const t0 = Date.now();
 await page.evaluate((root) => (window as any).__editor.openProject(root), target);
+// No design branch yet: start one from the default base (develop/main).
+await E('if (e.startChoice) await e.startDesign(e.startChoice.defaultBase, "design-session")');
 log('worktree', await E<string>('return e.worktree'));
 await page.waitForFunction(() => ['ready', 'error'].includes((window as any).__editor.devServer?.status), null, { timeout: 420_000 });
 log('dev server', await E('return e.devServer'), `${Math.round((Date.now() - t0) / 1000)}s`);

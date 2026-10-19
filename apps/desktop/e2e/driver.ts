@@ -6,6 +6,7 @@
  *   curl -s localhost:7457/shot?name=a      → screenshot path
  *   curl -s localhost:7457/eval -d 'window.__editor.mode'
  *   curl -s localhost:7457/click -d '{"x":10,"y":20,"meta":true}'
+ *   curl -s localhost:7457/drag -d '{"from":{"x":10,"y":20},"to":{"x":90,"y":80}}'
  *
  * Every request needs the `x-driver-token` header (the token is written to
  * $DRIVER_HOME/token) and requests carrying an Origin are refused, so web pages
@@ -125,6 +126,20 @@ const server = createServer(async (req, res) => {
 				else if (url.pathname === '/click') await page.mouse.click(x, y);
 				else await page.mouse.dblclick(x, y);
 				for (const m of mods.reverse()) await page.keyboard.up(m);
+				break;
+			}
+			case '/drag': {
+				// {"from":{"x":1,"y":2},"to":{"x":3,"y":4},"shot":"name"} — optional screenshot before releasing.
+				const { from, to, steps = 12, shot } = json();
+				await page.mouse.move(from.x, from.y);
+				await page.mouse.down();
+				await page.mouse.move(to.x, to.y, { steps });
+				if (shot) {
+					await page.waitForTimeout(150);
+					const png = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+					writeFileSync(join(shots, `${shot}.png`), Buffer.from(png, 'base64'));
+				}
+				await page.mouse.up();
 				break;
 			}
 			case '/press':

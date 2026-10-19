@@ -32,6 +32,11 @@ const shot = (name: string) => nativeShot(app, join(shots, `${name}.png`));
 await shot('01-welcome');
 
 await page.evaluate((root) => (window as any).__editor.openProject(root), project);
+// First open: pick the branch to start designing from (the fixture repo only has `main`).
+await page.waitForSelector('[aria-labelledby="start-design-title"]', { timeout: 15_000 });
+log('start dialog branches:', await page.locator('[data-branch]').evaluateAll((els) => els.map((e) => e.getAttribute('data-branch'))));
+await shot('01b-start-design');
+await page.getByRole('button', { name: 'Start designing' }).click();
 log('opened project, waiting for dev server');
 await page.waitForFunction(() => (window as any).__editor.devServer?.status === 'ready', null, { timeout: 90_000 });
 await page.waitForFunction(() => (window as any).__editor.frameReady.desktop === true, null, { timeout: 30_000 });
@@ -172,7 +177,7 @@ await page.evaluate(async () => {
 	await e.select('desktop', header.children.map((c: any) => c.id));
 });
 await page.waitForTimeout(400);
-await page.keyboard.press('s');
+await page.keyboard.press('Shift+A');
 await page.waitForTimeout(1500);
 const afterPage = readFileSync(page1, 'utf8');
 log('wrapped:', afterPage.includes('<div class="flex flex-col gap-2">'));

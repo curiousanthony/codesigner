@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { DesignBranch } from '@codesigner/protocol';
+import type { DesignBranch, SourceBranch } from '@codesigner/protocol';
 
 export function git(cwd: string, args: string[], input?: string): string {
 	return execFileSync('git', args, {
@@ -51,6 +51,33 @@ export function defaultBaseBranch(repoRoot: string): string {
 		if (tryGit(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${candidate}`]) !== null) return candidate;
 	}
 	return currentBranch(repoRoot) ?? 'HEAD';
+}
+
+/**
+ * Branches a design can start from: local ones, then remote-tracking ones with
+ * no local counterpart, each group sorted by last commit (newest first).
+ */
+export function listSourceBranches(repoRoot: string): SourceBranch[] {
+	const out = tryGit(repoRoot, [
+		'for-each-ref',
+		'--sort=-committerdate',
+		'--format=%(refname)%09%(HEAD)%09%(committerdate:iso-strict)%09%(subject)',
+		'refs/heads',
+		'refs/remotes'
+	]);
+	if (!out) return [];
+	const local: SourceBranch[] = [];
+	const remote: SourceBranch[] = [];
+	for (const line of out.split('\n')) {
+		const [ref, head, date, ...subject] = line.split('\t');
+		if (ref.startsWith('refs/heads/')) {
+			local.push({ name: ref.slice(11), remote: false, current: head === '*', date, subject: subject.join('\t') });
+		} else if (ref.startsWith('refs/remotes/') && !ref.endsWith('/HEAD')) {
+			remote.push({ name: ref.slice(13), remote: true, current: false, date, subject: subject.join('\t') });
+		}
+	}
+	const names = new Set(local.map((b) => b.name));
+	return [...local, ...remote.filter((b) => !names.has(b.name.slice(b.name.indexOf('/') + 1)))];
 }
 
 export function listBranches(repoRoot: string): DesignBranch[] {
@@ -116,6 +143,8 @@ export function createDesignBranch(repoRoot: string, name: string, from?: string
 	if (existsSync(dir)) throw new Error(`A design branch folder already exists at ${dir}`);
 
 	const exists = tryGit(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]) !== null;
+	// Reusing an existing branch would silently ignore the base the user picked.
+	if (exists && from) throw new Error(`A branch named ${branch} already exists. Pick another name.`);
 	git(repoRoot, exists ? ['worktree', 'add', dir, branch] : ['worktree', 'add', '-b', branch, dir, base]);
 	git(repoRoot, ['config', `branch.${branch}.codesigner-base`, base]);
 	copyEnvFiles(repoRoot, dir);

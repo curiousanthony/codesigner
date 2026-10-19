@@ -92,6 +92,17 @@ export interface DesignBranch {
 	dirty?: boolean;
 }
 
+/** A branch a design branch can start from (local, or remote-only like `origin/feature`). */
+export interface SourceBranch {
+	name: string;
+	remote: boolean;
+	/** Checked out in the main working copy. */
+	current: boolean;
+	/** Last commit date (ISO 8601) and subject. */
+	date: string;
+	subject: string;
+}
+
 export type DevServerStatus = 'idle' | 'installing' | 'starting' | 'ready' | 'error' | 'stopped';
 
 export interface DevServerState {

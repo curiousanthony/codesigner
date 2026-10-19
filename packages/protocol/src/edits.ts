@@ -32,6 +32,8 @@ export type EditOp =
 			/** Child index among element/component siblings; -1 appends. */
 			index: number;
 			markup: string;
+			/** Insert next to this layer instead (its enclosing child of `parent`); wins over `index`. */
+			anchor?: { target: SourceLoc; position: 'before' | 'after' };
 	  }
 	| { type: 'remove'; targets: SourceLoc[] }
 	| { type: 'duplicate'; targets: SourceLoc[] }
@@ -67,6 +69,8 @@ export interface EditResult {
 	changes: FileChange[];
 	/** Where each target ended up after the edit, keyed by the input loc "file:line:column". */
 	relocated?: Record<string, SourceLoc>;
+	/** Opening tag of each layer created by `insert` ops, in order. */
+	created?: SourceLoc[];
 	error?: string;
 	warnings?: string[];
 }

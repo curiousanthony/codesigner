@@ -1,5 +1,6 @@
-import type { SourceLoc } from '@codesigner/protocol';
-import { editor } from './editor.svelte.js';
+import type { DropTarget, SourceLoc } from '@codesigner/protocol';
+import { editor, type DrawTool } from './editor.svelte.js';
+import { spacing } from '#lib/style/tailwind-map.js';
 import { m } from '#lib/paraglide/messages.js';
 
 /** Default markup for inserted layers (Framer's defaults, as Tailwind). */
@@ -21,7 +22,7 @@ function requireSelection(): boolean {
 	return true;
 }
 
-/** Wraps the selection in a new Stack (S / ⌘⌥↩) or Frame (⌘↩). */
+/** Wraps the selection in a new Stack (⇧A / ⌘⌥↩) or Frame (⌘↩). */
 export async function wrapSelection(kind: 'stack' | 'frame' | 'grid' = 'stack') {
 	if (!requireSelection()) return;
 	const list = targets();
@@ -50,6 +51,33 @@ export async function insertLayer(kind: keyof typeof INSERT_MARKUP) {
 	}
 }
 
+/** Classes for a layer drawn with a tool; `size` is the drawn box in CSS px (null for a click). */
+export function drawnMarkup(kind: DrawTool, size: { width: number; height: number } | null): string {
+	// Snap to the 4px spacing grid so drawn sizes land on theme steps (w-40, h-24…).
+	const snap = (v: number) => Math.max(4, Math.round(v / 4) * 4);
+	const dims = size ? `${spacing('h', snap(size.height))} ${spacing('w', snap(size.width))}` : null;
+	switch (kind) {
+		case 'stack':
+			return `<div class="flex ${dims ?? 'min-h-24 w-40'} flex-col gap-2.5 p-2.5"></div>`;
+		case 'grid':
+			return `<div class="grid ${dims ?? 'min-h-24 w-40'} grid-cols-2 gap-2.5 p-2.5"></div>`;
+		case 'frame':
+			return `<div class="${dims ?? 'h-24 w-40'} rounded-lg bg-muted"></div>`;
+		case 'text':
+			return size && size.width >= 24 ? `<p class="${spacing('w', Math.round(size.width / 4) * 4)}">Text</p>` : '<p>Text</p>';
+	}
+}
+
+/** Inserts a drawn layer into the container under the pointer (Framer's S / F / T tools), then selects it. */
+export async function drawLayer(kind: DrawTool, frameId: string, target: DropTarget, size: { width: number; height: number } | null) {
+	const result = await editor.editWithResult(m.edit_insert({ kind }), [
+		{ type: 'insert', parent: target.parent, index: -1, markup: drawnMarkup(kind, size), anchor: target.anchor ?? undefined }
+	]);
+	const loc = result?.created?.[0];
+	// A new text layer goes straight into typing, like Framer's T tool.
+	if (loc) pendingSelect({ ...loc, tag: kind === 'text' ? 'p' : 'div' }, frameId, kind === 'text' ? (id) => editor.startTextEdit(frameId, id) : undefined);
+}
+
 export async function unwrapSelection() {
 	const info = editor.selected;
 	if (!info?.loc || info.kind !== 'element') return;
@@ -69,8 +97,8 @@ export async function duplicateSelection() {
 }
 
 /** After an edit that creates a layer, select it once the page has hot-reloaded. */
-function pendingSelect(loc: SourceLoc) {
-	const frameId = editor.selection.frameId ?? editor.primaryFrameId;
+function pendingSelect(loc: SourceLoc, inFrame?: string, then?: (id: string) => void) {
+	const frameId = inFrame ?? editor.selection.frameId ?? editor.primaryFrameId;
 	if (!frameId) return;
 	const frame = editor.frames.get(frameId);
 	if (!frame) return;
@@ -81,7 +109,10 @@ function pendingSelect(loc: SourceLoc) {
 		const ids = await frame.findLoc(loc);
 		if (ids.length) {
 			await editor.refreshTree();
-			setTimeout(() => void editor.select(frameId, [ids[0]]), 120);
+			setTimeout(async () => {
+				await editor.select(frameId, [ids[0]]);
+				then?.(ids[0]);
+			}, 120);
 		}
 	});
 	setTimeout(off, 4000);

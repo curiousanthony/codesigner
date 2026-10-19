@@ -138,7 +138,7 @@ export class Workspace {
 			case 'duplicate':
 				return op.targets;
 			case 'insert':
-				return 'root' in op.parent ? [] : [op.parent];
+				return [...('root' in op.parent ? [] : [op.parent]), ...(op.anchor ? [op.anchor.target] : [])];
 			case 'move':
 				return [op.target, op.parent];
 			case 'variant-classes':
@@ -193,7 +193,15 @@ export class Workspace {
 				break;
 			case 'insert': {
 				const parent = 'root' in op.parent ? null : this.locate(doc, op.parent).node;
-				insert(doc, s, parent, op.index, op.markup);
+				let index = op.index;
+				if (op.anchor) {
+					const anchor = this.locate(doc, op.anchor.target).node;
+					const children = (parent ? parent.fragment : doc.ast.fragment).nodes.filter((n) => n.type !== 'Text' || n.data.trim() !== '');
+					// The anchor may sit inside an {#if}/{#each} block: use the parent's child that encloses it.
+					const at = children.findIndex((n) => n.start <= anchor.start && anchor.end <= n.end);
+					if (at >= 0) index = op.anchor.position === 'before' ? at : at + 1;
+				}
+				insert(doc, s, parent, index, op.markup);
 				break;
 			}
 			case 'remove':
@@ -221,13 +229,16 @@ export class Workspace {
 
 	async apply(request: EditRequest): Promise<EditResult> {
 		const warnings: string[] = [];
+		const created: SourceLoc[] = [];
 		const texts = new Map<string, { before: string; current: string }>();
 		try {
 			for (const op of request.ops) {
 				const file = this.fileOf(op);
 				if (!file.endsWith('.svelte')) throw new EditError(`Only .svelte files can be edited visually (${file})`);
 				const entry = texts.get(file) ?? { before: this.read(file), current: this.read(file) };
+				const previous = entry.current;
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
+				if (op.type === 'insert') created.push(insertedAt(file, previous, entry.current));
 				texts.set(file, entry);
 			}
 		} catch (error) {
@@ -241,7 +252,7 @@ export class Workspace {
 			changes.push({ file, before, after: current });
 		}
 		if (changes.length) this.record(request, changes);
-		return { ok: true, changes, warnings };
+		return { ok: true, changes, warnings, ...(created.length ? { created } : {}) };
 	}
 
 	/**
@@ -418,4 +429,15 @@ export class Workspace {
 	components(): ComponentInfo[] {
 		return scanComponents(this.root, 'src/lib', this.libAlias);
 	}
+}
+
+/** Where an insert put its markup: the first tag after the common prefix of the two texts. */
+function insertedAt(file: string, before: string, after: string): SourceLoc {
+	let i = 0;
+	while (i < before.length && before.charCodeAt(i) === after.charCodeAt(i)) i++;
+	// The prefix can end inside the leading indentation or on the previous `<`; back up to a line start.
+	while (i > 0 && after[i - 1] !== '\n' && /\s|</.test(after[i - 1])) i--;
+	const start = after.indexOf('<', i);
+	const lines = after.slice(0, start).split('\n');
+	return { file, line: lines.length, column: lines[lines.length - 1].length };
 }

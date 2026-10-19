@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Breakpoint, GuestToHost, NodeId } from '@codesigner/protocol';
+	import type { Breakpoint, DropTarget, GuestToHost, NodeId, Rect } from '@codesigner/protocol';
 	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
-	import { editor } from '#lib/state/editor.svelte.js';
+	import { editor, isDrawTool } from '#lib/state/editor.svelte.js';
+	import { drawLayer } from '#lib/state/commands.js';
 	import { invoke } from '#lib/api.js';
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
@@ -51,6 +52,8 @@
 		}, 150);
 	}
 	const designMode = $derived(editor.mode === 'design' && editor.effectiveTool === 'select');
+	/** A draw tool (S / F / T / ⇧G) is active: drag or click to insert a layer. */
+	const drawing = $derived(editor.mode === 'design' && isDrawTool(editor.effectiveTool) && !isComponentCanvas);
 	const selectedRects = $derived(editor.selectedRects[frameId] ?? {});
 	const selectedComponent = $derived(editor.selected?.kind === 'instance');
 	const hoverRect = $derived(editor.hoverRect?.frameId === frameId ? editor.hoverRect.rect : null);
@@ -87,6 +90,9 @@
 			case 'navigated':
 				editor.onFrameNavigated(frameId, message.url, message.title);
 				client?.send({ type: 'request-tree' });
+				break;
+			case 'text-edited':
+				void editor.onTextEdited(frameId, message.id, message.text, message.cancelled);
 				break;
 			case 'scrolled':
 				if (!message.consumed) {
@@ -171,6 +177,13 @@
 	let hoverSeq = 0;
 	let lastHit: NodeId[] = [];
 	async function onpointermove(event: PointerEvent) {
+		if (drawing) {
+			const p = toGuest(event);
+			if (drawStart) {
+				drawBox = { x: Math.min(drawStart.x, p.x), y: Math.min(drawStart.y, p.y), width: Math.abs(p.x - drawStart.x), height: Math.abs(p.y - drawStart.y) };
+			} else void previewDrop(p.x, p.y);
+			return;
+		}
 		if (!client || !designMode) return;
 		const seq = ++hoverSeq;
 		const { x, y } = toGuest(event);
@@ -183,16 +196,79 @@
 
 	function onpointerleave() {
 		hoverSeq++;
+		dropSeq++;
+		if (!drawStart) dropPreview = null;
 		editor.setHover(frameId, null);
 	}
 
 	async function onclick(event: MouseEvent) {
-		if (!client || !designMode) return;
+		if (!client || !designMode || suppressClick) return;
 		const { x, y } = toGuest(event);
 		const path = await client.hit(x, y);
 		lastHit = path;
 		const gesture = event.metaKey || event.ctrlKey ? 'deep' : event.detail >= 2 ? 'double' : 'click';
+		if (editor.textEditing) {
+			// Clicking anywhere commits the text being typed; a click inside it keeps editing.
+			if (editor.textEditing.frameId === frameId && path.includes(editor.textEditing.id)) return;
+			editor.endTextEdit();
+		}
+		// Double-clicking the selected text layer edits it in place, like Framer.
+		const current = editor.selected;
+		if (gesture === 'double' && current?.textEditable && editor.selection.frameId === frameId && path.includes(current.id)) {
+			editor.startTextEdit(frameId, current.id);
+			return;
+		}
 		await editor.selectFromHit(frameId, path, gesture, event.shiftKey);
+	}
+
+	// ------------------------------------------------------------ drawing
+	let dropPreview = $state<DropTarget | null>(null);
+	let drawStart: { x: number; y: number } | null = null;
+	let drawBox = $state<Rect | null>(null);
+	let suppressClick = false;
+	let dropSeq = 0;
+	$effect(() => {
+		if (!drawing) {
+			dropPreview = null;
+			drawBox = null;
+			drawStart = null;
+		}
+	});
+
+	async function previewDrop(x: number, y: number) {
+		const seq = ++dropSeq;
+		const target = (await client?.dropTarget(x, y)) ?? null;
+		if (seq === dropSeq && drawing) dropPreview = target;
+	}
+
+	function onpointerdown(event: PointerEvent) {
+		if (!drawing || event.button !== 0) return;
+		event.preventDefault();
+		gesture.setPointerCapture(event.pointerId);
+		drawStart = toGuest(event);
+		drawBox = { ...drawStart, width: 0, height: 0 };
+		void previewDrop(drawStart.x, drawStart.y);
+	}
+
+	async function onpointerup(event: PointerEvent) {
+		if (!drawing || !drawStart || !client) return;
+		const start = drawStart;
+		const box = drawBox;
+		drawStart = null;
+		drawBox = null;
+		suppressClick = true;
+		setTimeout(() => (suppressClick = false), 0);
+		const tool = editor.effectiveTool;
+		if (!isDrawTool(tool)) return;
+		const target = await client.dropTarget(start.x, start.y);
+		dropPreview = null;
+		editor.tool = 'select'; // like Framer, a tool draws one layer
+		if (!target) {
+			editor.toast(m.draw_no_container());
+			return;
+		}
+		const size = box && box.width >= 6 && box.height >= 6 ? { width: box.width, height: box.height } : null;
+		void drawLayer(tool, frameId, target, size);
 	}
 
 	function onwheel(event: WheelEvent) {
@@ -360,8 +436,10 @@
 		<div
 			bind:this={gesture}
 			class="absolute inset-0 z-10"
-			style="pointer-events:{designMode ? 'auto' : 'none'}; cursor:{designMode ? 'default' : 'auto'}"
+			style="pointer-events:{designMode || drawing ? 'auto' : 'none'}; cursor:{drawing ? 'crosshair' : designMode ? 'default' : 'auto'}"
 			role="presentation"
+			{onpointerdown}
+			{onpointerup}
 			{onpointermove}
 			{onpointerleave}
 			{onclick}
@@ -371,6 +449,23 @@
 
 		<!-- Overlays -->
 		<div class="pointer-events-none absolute inset-0 z-20">
+			{#if drawing && dropPreview}
+				{@const p = dropPreview.parentRect}
+				<div class="absolute" style="left:{p.x}px; top:{p.y}px; width:{p.width}px; height:{p.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);"></div>
+				{#if dropPreview.line}
+					{@const l = dropPreview.line}
+					{@const vertical = l.height > l.width}
+					<div class="absolute bg-accent" style="left:{l.x}px; top:{l.y}px; width:{vertical ? 'calc(2px * var(--inv))' : l.width + 'px'}; height:{vertical ? l.height + 'px' : 'calc(2px * var(--inv))'};"></div>
+				{/if}
+			{/if}
+			{#if drawBox && (drawBox.width > 2 || drawBox.height > 2)}
+				<div class="absolute" style="left:{drawBox.x}px; top:{drawBox.y}px; width:{drawBox.width}px; height:{drawBox.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);">
+					<span class="absolute top-full left-1/2 rounded-[4px] bg-accent px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white tabular-nums"
+						style="transform: translateX(-50%) scale(var(--inv)); transform-origin: top center; margin-top: calc(6px * var(--inv));">
+						{Math.round(drawBox.width)} × {Math.round(drawBox.height)}
+					</span>
+				</div>
+			{/if}
 			{#if hoverRect && designMode && !Object.keys(selectedRects).includes(editor.hover?.id ?? '')}
 				<div
 					class="absolute"

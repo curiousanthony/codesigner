@@ -10,6 +10,7 @@
 import type {
 	CanvasMode,
 	ComputedSnapshot,
+	DropTarget,
 	ElementInfo,
 	GuestToHost,
 	HostToGuest,
@@ -434,6 +435,107 @@ export function bridgeMain(config: BridgeConfig) {
 		return out;
 	};
 
+	// ------------------------------------------------------ text editing
+	let editing: { el: HTMLElement; id: NodeId; original: string } | null = null;
+	const finishEdit = (cancel: boolean) => {
+		if (!editing) return;
+		const { el, id, original } = editing;
+		editing = null;
+		el.removeEventListener('keydown', onEditKey, true);
+		el.removeEventListener('input', pushRects);
+		el.removeAttribute('contenteditable');
+		const text = (el.innerText ?? '').replace(/\n+$/, '');
+		if (cancel) el.textContent = original;
+		getSelection()?.removeAllRanges();
+		send({ type: 'text-edited', id, text: cancel ? original : text, cancelled: cancel || text === original });
+	};
+	function onEditKey(event: KeyboardEvent) {
+		event.stopPropagation(); // keep the app's own shortcuts out of the way while typing
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			finishEdit(true);
+		} else if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			finishEdit(false);
+		}
+	}
+	const startEdit = (id: NodeId) => {
+		finishEdit(false);
+		const el = (recFor(id)?.els[0] ?? elFor(id)) as HTMLElement | null;
+		if (!el) return;
+		editing = { el, id, original: el.textContent ?? '' };
+		el.setAttribute('contenteditable', 'plaintext-only');
+		el.addEventListener('keydown', onEditKey, true);
+		el.addEventListener('input', pushRects);
+		el.addEventListener('blur', () => finishEdit(false), { once: true });
+		el.focus();
+		const range = document.createRange();
+		range.selectNodeContents(el);
+		getSelection()?.removeAllRanges();
+		getSelection()?.addRange(range);
+	};
+
+	// ------------------------------------------------------- drop target
+	/** Elements that can't take a drawn child (void, text-level and interactive tags). */
+	const LEAF = /^(img|input|br|hr|svg|path|p|span|h[1-6]|a|button|label|textarea|select|option|video|audio|canvas|iframe|strong|em|b|i|small|code|pre|li)$/;
+	const visible = (el: Element) => (el as HTMLElement).offsetParent !== null || getComputedStyle(el).position === 'fixed';
+
+	/** The container under a point and where a new child would go, following its flow (row, column or grid). */
+	const dropTarget = (x: number, y: number): DropTarget | null => {
+		const path = pathAt(x, y);
+		for (let i = path.length - 1; i >= 0; i--) {
+			let rec = recFor(path[i]);
+			if (!rec) continue;
+			// Empty space of a layout around the page: draw into the page, not into every page of the layout.
+			if (/\+layout\.svelte$/.test(rec.layer.loc.file)) {
+				const pages = rec.children.filter((c) => /\+page\.svelte$/.test(c.layer.loc.file) && c.layer.kind === 'element');
+				if (pages.length === 1 && !LEAF.test(pages[0].els[0].localName)) rec = pages[0];
+			}
+			const el = rec.els[0];
+			const file = rec.layer.loc.file;
+			const kids = rec.children.filter((c) => c.layer.loc.file === file && c.els.some(visible));
+			// A component usage only takes children when it already renders markup from this file (a snippet).
+			if (rec.layer.kind === 'instance' ? kids.length === 0 : LEAF.test(el.localName)) continue;
+			const cs = getComputedStyle(el);
+			const grid = cs.display.includes('grid');
+			const row = !grid && cs.display.includes('flex') && cs.flexDirection.startsWith('row');
+			const parentRect = unionRect(rec.els) ?? { x: 0, y: 0, width: 0, height: 0 };
+			const parent = { ...rec.layer.loc, tag: rec.layer.kind === 'instance' ? rec.layer.tag : el.localName };
+			if (kids.length === 0) return { parentId: rec.id, parent, anchor: null, parentRect, line: null };
+			const rects = kids.map((k) => unionRect(k.els.filter(visible)) ?? parentRect);
+			let index = rects.findIndex((r) =>
+				grid ? y < r.y || (y <= r.y + r.height && x < r.x + r.width / 2) : row ? x < r.x + r.width / 2 : y < r.y + r.height / 2
+			);
+			let before = index >= 0;
+			if (!before) index = rects.length - 1;
+			// Repeats of one source location ({#each}) take no siblings in between: snap to the run's edges.
+			const key = locKey(kids[index].layer.loc);
+			let first = index;
+			let last = index;
+			while (first > 0 && locKey(kids[first - 1].layer.loc) === key) first--;
+			while (last < kids.length - 1 && locKey(kids[last + 1].layer.loc) === key) last++;
+			if (first !== last && (before ? index !== first : index !== last)) {
+				const middle = (first + last + 1) / 2;
+				if ((before ? index : index + 1) < middle) [index, before] = [first, true];
+				else [index, before] = [last, false];
+			}
+			const r = rects[index];
+			const t = 2;
+			const line: Rect =
+				row || grid
+					? { x: (before ? r.x : r.x + r.width) - t / 2, y: r.y, width: t, height: r.height }
+					: { x: r.x, y: (before ? r.y : r.y + r.height) - t / 2, width: r.width, height: t };
+			return {
+				parentId: rec.id,
+				parent,
+				anchor: { target: kids[index].layer.loc, position: before ? 'before' : 'after' },
+				parentRect,
+				line
+			};
+		}
+		return null;
+	};
+
 	// ------------------------------------------------------- highlights
 	let rectsQueued = false;
 	const pushRects = () => {
@@ -548,6 +650,9 @@ export function bridgeMain(config: BridgeConfig) {
 			case 'hit':
 				send({ type: 'hit-result', reqId: msg.reqId, path: pathAt(msg.x, msg.y) });
 				break;
+			case 'drop-target':
+				send({ type: 'drop-result', reqId: msg.reqId, target: dropTarget(msg.x, msg.y) });
+				break;
 			case 'describe':
 				send({
 					type: 'described',
@@ -581,6 +686,12 @@ export function bridgeMain(config: BridgeConfig) {
 				break;
 			case 'navigate':
 				location.assign(msg.url);
+				break;
+			case 'edit-text':
+				startEdit(msg.id);
+				break;
+			case 'end-edit-text':
+				finishEdit(msg.cancel);
 				break;
 		}
 	});

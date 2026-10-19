@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
 import fixPath from 'fix-path';
 import { resolve } from 'node:path';
-import { checkpoint, createDesignBranch, ensureIsolationRoute, listBranches, removeIsolationRoute, scanRoutes } from '@codesigner/engine';
+import { checkpoint, createDesignBranch, defaultBaseBranch, ensureIsolationRoute, listBranches, listSourceBranches, removeIsolationRoute, scanRoutes } from '@codesigner/engine';
 import { EDITOR_APP_URL, EDITOR_DEV_URL, appVersion, isDev, preloadPath } from './env.js';
 import { handle, broadcast } from './ipc.js';
 import { handleAppScheme, registerAppScheme } from './protocol.js';
@@ -117,6 +117,7 @@ function registerHandlers() {
 	handle('canvas:force-states', (id, rules) => forceStates(id, rules));
 
 	handle('branch:list', (root) => listBranches(root));
+	handle('branch:sources', (root) => ({ branches: listSourceBranches(root), defaultBase: defaultBaseBranch(root) }));
 	handle('branch:create', (root, name, from) => createDesignBranch(root, name, from));
 	handle('branch:checkpoint', (worktree, message) => checkpoint(worktree, message));
 
