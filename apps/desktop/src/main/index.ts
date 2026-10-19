@@ -2,6 +2,11 @@ import { app, BrowserWindow, Menu, shell } from 'electron';
 import fixPath from 'fix-path';
 import { resolve } from 'node:path';
 import {
+	commentAuthor,
+	deleteComment,
+	listComments,
+	newCommentId,
+	saveComment,
 	createDesignBranch,
 	defaultBaseBranch,
 	deleteDesignBranch,
@@ -136,6 +141,10 @@ function registerHandlers() {
 	});
 	handle('canvas:force-states', (id, rules) => forceStates(id, rules));
 
+	handle('comments:list', (worktree) => listComments(worktree));
+	handle('comments:save', (worktree, comment) => saveComment(worktree, comment));
+	handle('comments:delete', (worktree, id) => deleteComment(worktree, id));
+	handle('comments:new', (worktree) => ({ id: newCommentId(), author: commentAuthor(worktree) }));
 	handle('branch:list', (root) => listBranches(root));
 	handle('branch:sources', (root) => ({ branches: listSourceBranches(root), defaultBase: defaultBaseBranch(root) }));
 	handle('branch:create', (root, name, from) => createDesignBranch(root, name, from));

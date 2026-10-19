@@ -337,6 +337,23 @@ const reordered = readFileSync(pageFile, 'utf8');
 log('text moved above the section:', reordered.indexOf('Hello from smoke') < reordered.indexOf('<section'));
 await shot('12-drawn');
 
+// Comments (C): pin one on the heading, then remove it.
+// (keep the selection: the versions step below deletes the selected text)
+await page.keyboard.press('c');
+const heading = await at('h1', 10, -10);
+await page.mouse.click(heading.x, heading.y);
+await page.waitForSelector('textarea', { timeout: 5000 });
+await page.keyboard.type('Bigger on phone');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(800);
+const comments = await page.evaluate(() => (window as any).__editor.comments.map((c: any) => `${c.anchor.tag}: ${c.messages[0].body}`));
+log('comment pinned:', comments, 'file saved:', execSync(`ls ${JSON.stringify(join(wt, '.codesigner/comments'))}`, { encoding: 'utf8' }).trim().endsWith('.json'));
+await page.evaluate(async () => {
+	const e = (window as any).__editor;
+	for (const c of [...e.comments]) await e.deleteComment(c.id);
+	e.setTool('select');
+});
+
 // Versions: save, delete the text, restore the saved version.
 await page.evaluate(() => (window as any).__editor.saveVersion('Smoke: drawn layers'));
 await page.evaluate(() => (window as any).__editor.edit('Delete', [{ type: 'remove', targets: [(window as any).__editor.selected.loc] }]));

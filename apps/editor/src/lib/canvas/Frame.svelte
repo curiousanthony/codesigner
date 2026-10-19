@@ -53,6 +53,8 @@
 		}, 150);
 	}
 	const designMode = $derived(editor.mode === 'design' && editor.effectiveTool === 'select');
+	/** Comment tool (C): click to pin a comment on an element. */
+	const commenting = $derived(editor.mode === 'design' && editor.effectiveTool === 'comment' && !isComponentCanvas);
 	/** A draw tool (S / F / T / ⇧G) is active: drag or click to insert a layer. */
 	const drawing = $derived(editor.mode === 'design' && isDrawTool(editor.effectiveTool) && !isComponentCanvas);
 	const selectedRects = $derived(editor.selectedRects[frameId] ?? {});
@@ -78,6 +80,7 @@
 				editor.onFrameNavigated(frameId, message.url, message.title);
 				client?.send({ type: 'request-tree' });
 				editor.syncHighlights();
+				editor.syncAnchors(frameId);
 				break;
 			case 'tree':
 				if (message.root?.children.length) svelteDev = true;
@@ -85,7 +88,7 @@
 				if (isComponentCanvas) forceStates();
 				break;
 			case 'rects':
-				editor.setRects(frameId, message.hover, message.selected);
+				editor.setRects(frameId, message.hover, message.selected, message.anchors);
 				break;
 			case 'dom-changed':
 				if (message.reason === 'hmr') {
@@ -212,6 +215,7 @@
 	}
 
 	async function onclick(event: MouseEvent) {
+		if (commenting && client) return void startComment(event);
 		if (!client || !designMode || suppressClick) return;
 		const { x, y } = toGuest(event);
 		const path = await client.hit(x, y);
@@ -362,6 +366,52 @@
 	$effect(() => {
 		if (!editor.draggingAsset) componentDrop = null;
 	});
+
+	// ------------------------------------------------------------ comments
+	async function startComment(event: MouseEvent) {
+		if (!client) return;
+		editor.openComment = null;
+		const p = toGuest(event);
+		const path = await client.hit(p.x, p.y);
+		const id = editor.pick(path, 'deep', frameId);
+		const [info] = id ? await client.describe([id]) : [];
+		if (!info?.loc) return void editor.toast(m.comment_no_layer());
+		const twins = await client.findLoc({ ...info.loc, tag: info.componentTag ?? info.tag });
+		const r = info.rect;
+		draftPoint = p;
+		draftBody = '';
+		editor.commentDraft = {
+			frameId,
+			anchor: {
+				file: info.loc.file,
+				line: info.loc.line,
+				column: info.loc.column,
+				tag: info.componentTag ?? info.tag,
+				occurrence: Math.max(0, twins.indexOf(info.id)),
+				text: info.text,
+				name: info.name,
+				x: r.width ? Math.min(1, Math.max(0, (p.x - r.x) / r.width)) : 0.5,
+				y: r.height ? Math.min(1, Math.max(0, (p.y - r.y) / r.height)) : 0.5
+			}
+		};
+	}
+
+	/** Pins of this page with their position in this frame (guest px). */
+	const pins = $derived.by(() => {
+		if (!commenting) return [];
+		const rects = editor.pinRects[frameId] ?? {};
+		return editor.pageComments
+			.map((comment, i) => {
+				const r = rects[comment.id];
+				return r ? { comment, n: i + 1, x: r.x + comment.anchor.x * r.width, y: r.y + comment.anchor.y * r.height } : null;
+			})
+			.filter((p) => p !== null);
+	});
+	/** Where the comment being written was clicked (guest px). */
+	let draftPoint = $state<{ x: number; y: number } | null>(null);
+	const drafting = $derived(commenting && editor.commentDraft?.frameId === frameId && !!draftPoint);
+	let draftBody = $state('');
+	let replyBody = $state('');
 
 	function onwheel(event: WheelEvent) {
 		if (event.ctrlKey || event.metaKey || !client) return; // zoom is handled by the canvas
@@ -608,7 +658,7 @@
 		<div
 			bind:this={gesture}
 			class="absolute inset-0 z-10"
-			style="pointer-events:{designMode || drawing || editor.draggingAsset ? 'auto' : 'none'}; cursor:{drawing ? 'crosshair' : designMode ? 'default' : 'auto'}"
+			style="pointer-events:{designMode || drawing || commenting || editor.draggingAsset ? 'auto' : 'none'}; cursor:{drawing || commenting ? 'crosshair' : designMode ? 'default' : 'auto'}"
 			role="presentation"
 			{ondragover}
 			{ondrop}
@@ -624,6 +674,69 @@
 
 		<!-- Overlays -->
 		<div class="pointer-events-none absolute inset-0 z-20">
+			{#each pins as pin (pin.comment.id)}
+				{@const open = editor.openComment === pin.comment.id && (editor.openCommentFrame ?? editor.primaryFrameId) === frameId}
+				{@const flip = (pin.x + 290 / scale) > breakpoint.width}
+				<button
+					type="button"
+					class="pointer-events-auto absolute flex size-6 items-center justify-center rounded-full rounded-bl-none text-[11px] font-semibold text-white shadow-md
+						{pin.comment.resolved ? 'bg-faint' : open ? 'bg-accent-strong ring-2 ring-white' : 'bg-accent'}"
+					style="left:{pin.x}px; top:{pin.y}px; transform: translateY(-100%) scale(var(--inv)); transform-origin: bottom left;"
+					aria-label={m.comment_open({ n: pin.n })}
+					data-comment={pin.comment.id}
+					onclick={(e) => {
+						e.stopPropagation();
+						editor.commentDraft = null;
+						replyBody = '';
+						editor.openCommentFrame = frameId;
+						editor.openComment = open ? null : pin.comment.id;
+					}}
+				>
+					{pin.n}
+				</button>
+				{#if open}
+					{@const c = pin.comment}
+					<div class="pointer-events-auto absolute z-10 flex w-[260px] flex-col gap-2 rounded-popover bg-popover p-3 text-[12px] text-fg shadow-popover"
+						style="left:{pin.x}px; top:{pin.y}px; transform: translate({flip ? 'calc(-100% * var(--inv) - 8px * var(--inv))' : 'calc(18px * var(--inv))'}, 0) scale(var(--inv)); transform-origin: top left;"
+						role="dialog" aria-label={m.comment_thread()}>
+						<p class="truncate text-[10.5px] text-muted">{c.anchor.name} · {c.anchor.file}:{c.anchor.line}</p>
+						{#each c.messages as msg, i (i)}
+							<div>
+								<p class="text-[11px] font-semibold text-fg-strong">{msg.author} <span class="font-normal text-muted">{new Date(msg.at).toLocaleString()}</span></p>
+								<p class="whitespace-pre-wrap">{msg.body}</p>
+							</div>
+						{/each}
+						<form class="flex gap-1" onsubmit={(e) => { e.preventDefault(); void editor.replyComment(c.id, replyBody); replyBody = ''; }}>
+							<input class="h-7 min-w-0 flex-1 rounded-[6px] bg-control px-2 outline-none placeholder:text-muted" placeholder={m.comment_reply()} bind:value={replyBody} />
+						</form>
+						<div class="flex items-center gap-1">
+							<button type="button" class="h-7 rounded-[6px] bg-control px-2 hover:bg-control-hover" onclick={() => editor.resolveComment(c.id, !c.resolved)}>{c.resolved ? m.comment_reopen() : m.comment_resolve()}</button>
+							<button type="button" class="h-7 rounded-[6px] px-2 text-label hover:bg-control" onclick={() => editor.copyForAgent([c])}>{m.comment_copy_agent()}</button>
+							<span class="flex-1"></span>
+							<button type="button" class="h-7 rounded-[6px] px-2 text-danger hover:bg-danger/10" onclick={() => editor.deleteComment(c.id)}>{m.comment_delete()}</button>
+						</div>
+					</div>
+				{/if}
+			{/each}
+			{#if drafting && draftPoint}
+				<span class="absolute size-6 rounded-full rounded-bl-none bg-accent shadow-md"
+					style="left:{draftPoint.x}px; top:{draftPoint.y}px; transform: translateY(-100%) scale(var(--inv)); transform-origin: bottom left;"></span>
+				<form class="pointer-events-auto absolute z-10 flex w-[260px] flex-col gap-2 rounded-popover bg-popover p-3 text-[12px] shadow-popover"
+					style="left:{draftPoint.x}px; top:{draftPoint.y}px; transform: translate(calc(18px * var(--inv)), 0) scale(var(--inv)); transform-origin: top left;"
+					onsubmit={(e) => { e.preventDefault(); void editor.addComment(draftBody); }}>
+					<p class="truncate text-[10.5px] text-muted">{editor.commentDraft?.anchor.name}</p>
+					<!-- svelte-ignore a11y_autofocus -->
+					<textarea class="min-h-16 resize-none rounded-[6px] bg-control px-2 py-1.5 outline-none placeholder:text-muted" placeholder={m.comment_placeholder()} bind:value={draftBody} autofocus
+						onkeydown={(e) => {
+							if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void editor.addComment(draftBody); }
+							if (e.key === 'Escape') editor.commentDraft = null;
+						}}></textarea>
+					<div class="flex justify-end gap-1">
+						<button type="button" class="h-7 rounded-[6px] px-2 text-label hover:bg-control" onclick={() => (editor.commentDraft = null)}>{m.action_cancel()}</button>
+						<button type="submit" class="h-7 rounded-[6px] bg-accent px-2.5 text-white disabled:opacity-50" disabled={!draftBody.trim()}>{m.comment_post()}</button>
+					</div>
+				</form>
+			{/if}
 			{#if measures.length}
 				{#each measures as line, i (i)}
 					{@const vertical = line.x1 === line.x2}

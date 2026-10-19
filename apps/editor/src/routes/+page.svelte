@@ -18,6 +18,7 @@
 	import AssetsPanel from '#lib/panels/AssetsPanel.svelte';
 	import StylePanel from '#lib/panels/StylePanel.svelte';
 	import AgentPanel from '#lib/panels/AgentPanel.svelte';
+	import CommentsPanel from '#lib/panels/CommentsPanel.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let canvas: Canvas | undefined = $state();
@@ -141,8 +142,13 @@
 				// ⇧A: put the selection inside a new Stack
 				if (event.shiftKey) void wrapSelection('stack');
 				break;
+			case 'c':
+				editor.setTool(editor.tool === 'comment' ? 'select' : 'comment');
+				break;
 			case 'Escape':
-				if (isDrawTool(editor.tool)) editor.tool = 'select';
+				if (editor.commentDraft || editor.openComment) ((editor.commentDraft = null), (editor.openComment = null));
+				else if (editor.tool === 'comment') editor.setTool('select');
+				else if (isDrawTool(editor.tool)) editor.tool = 'select';
 				else if (editor.selection.ids.length) void editor.selectParent();
 				else if (editor.scope.length > 1) editor.setScope(['src/routes/']);
 				break;
@@ -239,7 +245,8 @@
 					<Tabs
 						tabs={[
 							{ value: 'agent', label: m.tab_agent(), hint: 'A' },
-							{ value: 'style', label: m.tab_style(), hint: 'E' }
+							{ value: 'style', label: m.tab_style(), hint: 'E' },
+							{ value: 'comments', label: m.tab_comments(), hint: 'C' }
 						]}
 						value={editor.rightTab}
 						onchange={(tab) => (editor.rightTab = tab)}
@@ -248,6 +255,8 @@
 				<div class="min-h-0 flex-1 overflow-y-auto">
 					{#if editor.rightTab === 'style'}
 						<StylePanel />
+					{:else if editor.rightTab === 'comments'}
+						<CommentsPanel />
 					{:else}
 						<AgentPanel />
 					{/if}

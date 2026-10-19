@@ -552,6 +552,31 @@ export function bridgeMain(config: BridgeConfig) {
 		return null;
 	};
 
+	// ------------------------------------------------------ comment pins
+	let anchors: { id: string; loc: SourceLoc; occurrence: number; text: string }[] = [];
+	const textOf = (el: Element) => ((el as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+	/** Each pin's element: its source location (and repeat), else an element with the same text; null when gone. */
+	const anchorRects = (): Record<string, Rect | null> => {
+		ensureTree();
+		const out: Record<string, Rect | null> = {};
+		for (const a of anchors) {
+			const key = locKey(a.loc);
+			const twins = [...recs.values()].filter((r) => locKey(r.layer.loc) === key);
+			let rec: LayerRec | undefined = twins[a.occurrence] ?? twins[0];
+			if (!rec && a.text) {
+				// The location moved (lines added above): same text, preferring the same file and tag.
+				const same = [...recs.values()].filter((r) => r.els[0] && textOf(r.els[0]) === a.text);
+				const tagOf = (r: LayerRec) => (r.layer.kind === 'instance' ? r.layer.tag : r.els[0].localName);
+				rec =
+					same.find((r) => r.layer.loc.file === a.loc.file && tagOf(r) === a.loc.tag) ??
+					same.find((r) => r.layer.loc.file === a.loc.file) ??
+					same.find((r) => tagOf(r) === a.loc.tag);
+			}
+			out[a.id] = rec ? unionRect(rec.els) : null;
+		}
+		return out;
+	};
+
 	// ------------------------------------------------------- highlights
 	let rectsQueued = false;
 	const pushRects = () => {
@@ -563,13 +588,13 @@ export function bridgeMain(config: BridgeConfig) {
 			if (done) return;
 			done = true;
 			rectsQueued = false;
-			if (!hoverId && selectedIds.length === 0) return;
+			if (!hoverId && selectedIds.length === 0 && anchors.length === 0) return;
 			const selected: Record<NodeId, Rect> = {};
 			for (const id of selectedIds) {
 				const r = rectFor(id);
 				if (r) selected[id] = r;
 			}
-			send({ type: 'rects', hover: hoverId ? rectFor(hoverId) : null, selected });
+			send({ type: 'rects', hover: hoverId ? rectFor(hoverId) : null, selected, ...(anchors.length ? { anchors: anchorRects() } : {}) });
 		};
 		requestAnimationFrame(run);
 		setTimeout(run, 100);
@@ -682,8 +707,12 @@ export function bridgeMain(config: BridgeConfig) {
 			case 'highlight':
 				hoverId = msg.hover;
 				selectedIds = msg.selected;
-				if (!hoverId && selectedIds.length === 0) send({ type: 'rects', hover: null, selected: {} });
+				if (!hoverId && selectedIds.length === 0 && anchors.length === 0) send({ type: 'rects', hover: null, selected: {} });
 				else pushRects();
+				break;
+			case 'set-anchors':
+				anchors = msg.anchors;
+				pushRects();
 				break;
 			case 'request-tree':
 				send({ type: 'tree', root: toTree() });

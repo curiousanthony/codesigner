@@ -177,6 +177,8 @@ export type HostToGuest =
 	/** Edit a text layer in place (contenteditable); the guest answers with `text-edited`. */
 	| { type: 'edit-text'; id: NodeId }
 	| { type: 'end-edit-text'; cancel: boolean }
+	/** Comment pins to track: their rects come back with every `rects` message (null = element not found). */
+	| { type: 'set-anchors'; anchors: { id: string; loc: SourceLoc; occurrence: number; text: string }[] }
 	/** Marks layers whose :hover / :active / :focus the host forces through DevTools ("none" clears). */
 	| { type: 'force-state'; ids: NodeId[]; state: 'none' | 'hover' | 'active' | 'focus' }
 	/** Puts text back after a refused edit (the frame shows what was typed until then). */
@@ -191,7 +193,7 @@ export type GuestToHost =
 	| { type: 'found-loc'; reqId: number; ids: NodeId[] }
 	| { type: 'tree'; root: LayerNode | null }
 	/** Rects (guest viewport px) of highlighted layers; sent on scroll, resize, mutation and HMR. */
-	| { type: 'rects'; hover: Rect | null; selected: Record<NodeId, Rect> }
+	| { type: 'rects'; hover: Rect | null; selected: Record<NodeId, Rect>; anchors?: Record<string, Rect | null> }
 	| { type: 'dom-changed'; reason: 'mutation' | 'hmr' }
 	| { type: 'navigated'; url: string; title: string }
 	| { type: 'scrolled'; consumed: boolean; dx: number; dy: number }

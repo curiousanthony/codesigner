@@ -133,6 +133,36 @@ export interface ShipStatus {
 	baseDirty: boolean;
 }
 
+/** A design comment pinned on an element of a page. */
+export interface Comment {
+	id: string;
+	createdAt: string;
+	/** Page path the comment was made on, e.g. "/projects/billing". */
+	path: string;
+	/** Breakpoint frame it was made in (pins show in every frame). */
+	frame: string;
+	anchor: CommentAnchor;
+	messages: { author: string; at: string; body: string }[];
+	resolved: boolean;
+}
+
+/** Several signals so a pin survives edits: source location, its occurrence, the element's text, the point inside it. */
+export interface CommentAnchor {
+	file: string;
+	line: number;
+	column: number;
+	tag: string;
+	/** Which repeat ({#each}) of that location. */
+	occurrence: number;
+	/** Visible text when pinned (fallback when the location moved). */
+	text: string;
+	/** Layer name, for the list ("Button", "Section"). */
+	name: string;
+	/** Point inside the element, 0–1. */
+	x: number;
+	y: number;
+}
+
 export type DevServerStatus = 'idle' | 'installing' | 'starting' | 'ready' | 'error' | 'stopped';
 
 export interface DevServerState {

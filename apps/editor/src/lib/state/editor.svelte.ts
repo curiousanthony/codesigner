@@ -19,6 +19,8 @@ import type {
 	Rect,
 	RecentProject,
 	RouteInfo,
+	Comment,
+	CommentAnchor,
 	ShipStatus,
 	SourceBranch,
 	SourceLoc,
@@ -30,6 +32,7 @@ import type { BridgeClient } from '#lib/canvas/bridge-client.js';
 import { parentOf, pickLayer } from '#lib/canvas/selection.js';
 import { buildUrl, matchRoute } from './routes';
 import { buildCanvasSpec, type CanvasSpec } from './component-canvas';
+import { agentPrompt } from './comments';
 import { m } from '#lib/paraglide/messages.js';
 
 /** The project open in this window, kept across reloads of the window (not across launches). */
@@ -52,7 +55,7 @@ const session = {
 };
 
 export type LeftTab = 'pages' | 'layers' | 'assets';
-export type RightTab = 'agent' | 'style';
+export type RightTab = 'agent' | 'style' | 'comments';
 export type DrawTool = 'stack' | 'frame' | 'grid' | 'text';
 export type PaddingSide = 'all' | 'top' | 'right' | 'bottom' | 'left';
 /** Interaction state being designed on the page (Style panel's state picker). */
@@ -152,6 +155,17 @@ class EditorState {
 	/** Hover / Pressed / Focus: shown forced on the selection, edits write `hover:` … classes. */
 	editState = $state<EditState>('default');
 	private forcedKey = '';
+
+	// Comments (C): pinned on elements, stored in .codesigner/comments of the working copy.
+	comments = $state<Comment[]>([]);
+	/** Pin positions per frame (guest px); null when the element can't be found ("outdated"). */
+	pinRects = $state<Record<string, Record<string, Rect | null>>>({});
+	/** A comment being written at a point of a frame. */
+	commentDraft = $state<{ frameId: string; anchor: CommentAnchor } | null>(null);
+	openComment = $state<string | null>(null);
+	/** Frame the open thread shows in (pins show everywhere, the thread once). */
+	openCommentFrame = $state<string | null>(null);
+	showResolved = $state(false);
 
 	/** "Create component" naming dialog (⌥⌘K). */
 	createComponentOpen = $state(false);
@@ -526,6 +540,7 @@ class EditorState {
 		this.devServer = await invoke('devserver:state', worktree);
 		const [routes] = await Promise.all([invoke('project:routes', worktree), this.loadTokens(), this.loadComponents()]);
 		this.routes = routes;
+		void this.loadComments();
 		this.devServer = await invoke('devserver:start', worktree);
 	}
 
@@ -695,6 +710,7 @@ class EditorState {
 			// ignore
 		}
 		this.currentTitle = title;
+		this.syncAnchors();
 		// Re-announcements of the same page (hydration, reconnects) keep the selection.
 		if (previous !== url) {
 			this.selection = EMPTY_SELECTION;
@@ -935,7 +951,105 @@ class EditorState {
 		}
 	}
 
-	setRects(frameId: string, hover: Rect | null, selected: Record<NodeId, Rect>) {
+	// --------------------------------------------------------- comments
+	get pagePath(): string {
+		return this.currentPath.split('?')[0] || '/';
+	}
+
+	/** Comments pinned on the page the canvas shows. */
+	get pageComments(): Comment[] {
+		return this.comments.filter((c) => c.path === this.pagePath && (this.showResolved || !c.resolved));
+	}
+
+	async loadComments() {
+		if (!this.worktree) return;
+		this.comments = await invoke('comments:list', this.worktree).catch(() => []);
+		this.syncAnchors();
+	}
+
+	/** Tells every frame which pins to track (their rects come back with highlights). */
+	syncAnchors(onlyFrame?: string) {
+		const anchors = this.editingComponent
+			? []
+			: this.pageComments.map((c) => ({ id: c.id, loc: { file: c.anchor.file, line: c.anchor.line, column: c.anchor.column, tag: c.anchor.tag }, occurrence: c.anchor.occurrence, text: c.anchor.text }));
+		for (const [id, frame] of this.frames) if (!onlyFrame || id === onlyFrame) frame.send({ type: 'set-anchors', anchors });
+	}
+
+	private async persist(comment: Comment) {
+		if (!this.worktree) return;
+		try {
+			await invoke('comments:save', this.worktree, comment);
+			this.comments = [...this.comments.filter((c) => c.id !== comment.id), comment].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+			this.syncAnchors();
+		} catch (error) {
+			this.toast(errorMessage(error), 'error');
+		}
+	}
+
+	async addComment(body: string) {
+		const draft = this.commentDraft;
+		if (!draft || !this.worktree || !body.trim()) return;
+		const { id, author } = await invoke('comments:new', this.worktree);
+		const at = new Date().toISOString();
+		this.commentDraft = null;
+		await this.persist({ id, createdAt: at, path: this.pagePath, frame: draft.frameId, anchor: draft.anchor, messages: [{ author, at, body: body.trim() }], resolved: false });
+		this.openCommentFrame = draft.frameId;
+		this.openComment = id;
+	}
+
+	async replyComment(id: string, body: string) {
+		const comment = this.comments.find((c) => c.id === id);
+		if (!comment || !this.worktree || !body.trim()) return;
+		const { author } = await invoke('comments:new', this.worktree);
+		await this.persist({ ...comment, messages: [...comment.messages, { author, at: new Date().toISOString(), body: body.trim() }] });
+	}
+
+	async resolveComment(id: string, resolved = true) {
+		const comment = this.comments.find((c) => c.id === id);
+		if (comment) await this.persist({ ...comment, resolved });
+		if (resolved && this.openComment === id) this.openComment = null;
+	}
+
+	async deleteComment(id: string) {
+		if (!this.worktree) return;
+		await invoke('comments:delete', this.worktree, id).catch(() => undefined);
+		this.comments = this.comments.filter((c) => c.id !== id);
+		if (this.openComment === id) this.openComment = null;
+		this.syncAnchors();
+	}
+
+	/** Copies comments as a prompt for a coding agent (until the Agent tab lands). */
+	async copyForAgent(list: Comment[]) {
+		if (!list.length) return;
+		await navigator.clipboard.writeText(agentPrompt(list));
+		this.toast(m.comment_copied({ count: list.length }), 'success');
+	}
+
+	/** Opens a comment from the list: goes to its page first. */
+	showComment(id: string) {
+		const comment = this.comments.find((c) => c.id === id);
+		if (!comment) return;
+		this.setTool('comment');
+		if (comment.path !== this.pagePath) this.goTo(comment.path);
+		this.openCommentFrame = this.frames.has(comment.frame) ? comment.frame : this.primaryFrameId;
+		this.openComment = id;
+	}
+
+	setTool(tool: Tool) {
+		this.tool = tool;
+		if (tool === 'comment') {
+			this.setMode('design');
+			this.rightTab = 'comments';
+			void this.loadComments(); // an agent may have resolved some
+		} else {
+			this.commentDraft = null;
+			this.openComment = null;
+			if (this.rightTab === 'comments') this.rightTab = 'style';
+		}
+	}
+
+	setRects(frameId: string, hover: Rect | null, selected: Record<NodeId, Rect>, anchors?: Record<string, Rect | null>) {
+		if (anchors) this.pinRects = { ...this.pinRects, [frameId]: anchors };
 		this.hoverRect = hover && this.hover?.frameId === frameId ? { frameId, rect: hover } : this.hoverRect?.frameId === frameId ? null : this.hoverRect;
 		this.selectedRects = { ...this.selectedRects, [frameId]: selected };
 	}

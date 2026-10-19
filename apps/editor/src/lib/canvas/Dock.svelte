@@ -24,7 +24,7 @@
 	role="toolbar"
 	aria-label={m.dock_label()}
 >
-	<IconButton label={m.tool_select()} active={editor.tool === 'select' && !interact} onclick={() => { editor.tool = 'select'; editor.setMode('design'); }}>
+	<IconButton label={m.tool_select()} active={editor.tool === 'select' && !interact} onclick={() => { editor.setTool('select'); editor.setMode('design'); }}>
 		<MousePointer2 class="size-4" strokeWidth={1.75} />
 	</IconButton>
 	<IconButton label={m.tool_hand()} active={editor.tool === 'hand'} onclick={() => (editor.tool = 'hand')}>
@@ -33,7 +33,7 @@
 	<IconButton label={m.tool_interact()} active={interact} onclick={() => editor.setMode(interact ? 'design' : 'interact')}>
 		<MousePointerClick class="size-4" strokeWidth={1.75} />
 	</IconButton>
-	<IconButton label={m.tool_comment()} active={editor.tool === 'comment'} onclick={() => editor.toast(m.coming_soon_comments())}>
+	<IconButton label={m.tool_comment()} active={editor.tool === 'comment'} onclick={() => editor.setTool(editor.tool === 'comment' ? 'select' : 'comment')}>
 		<MessageCircle class="size-4" strokeWidth={1.75} />
 	</IconButton>
 	<IconButton label={m.tool_theme()} active={editor.darkPreview} onclick={() => editor.setDarkPreview(!editor.darkPreview)}>

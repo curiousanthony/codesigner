@@ -92,11 +92,11 @@ Verified by `e2e/smoke.ts` on the fixture (save → restore → ship into the ch
 - ⬜ Ship: visual diff summary (before/after screenshots of changed pages)
 - ⬜ Conflict-aware re-sync when files change outside the app (agents, editors, git)
 
-## M5 — Comments ⬜
+## M5 — Comments 🚧
 
-- ⬜ Comment mode (`C`): pin on an element, threads, resolve
-- ⬜ Storage in `.codesigner/comments/*.json` with multi-signal anchoring and an "outdated" state
-- ⬜ "Send to agent" per comment, "Implement all unresolved"
+- ✅ Comment mode (`C`, or the bubble in the dock): click a layer to pin a comment, threads with replies, resolve / reopen, delete; pins in every breakpoint, the thread opens in the frame you clicked; Comments tab lists them by page (current first), with resolved ones on demand
+- ✅ Storage in `.codesigner/comments/*.json` (travels with the design branch); anchors combine source location + repeat index + text + point, so pins follow edits; "outdated" when the element is gone
+- 🚧 "Copy for agent" per comment and "Copy N for agent" (all unresolved) as a ready-to-paste prompt; sending straight to an agent comes with M6
 
 ## M6 — Agents ⬜
 

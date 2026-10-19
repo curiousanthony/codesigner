@@ -7,6 +7,7 @@ import type {
 	RecentProject,
 	RouteInfo,
 	ShipStatus,
+	Comment,
 	SourceBranch,
 	Version
 } from './project.js';
@@ -62,6 +63,11 @@ export interface InvokeMap {
 	/** Forces :hover / :active / :focus-visible on elements of a canvas frame (DevTools protocol). */
 	'canvas:force-states': (webContentsId: number, rules: { selector: string; states: string[] }[]) => boolean;
 
+	'comments:list': (worktree: string) => Comment[];
+	'comments:save': (worktree: string, comment: Comment) => Comment;
+	'comments:delete': (worktree: string, id: string) => void;
+	/** A fresh id and the git user name for a new comment. */
+	'comments:new': (worktree: string) => { id: string; author: string };
 	'branch:list': (root: string) => DesignBranch[];
 	/** Branches to start a design from, most recently committed first, plus the suggested default. */
 	'branch:sources': (root: string) => { branches: SourceBranch[]; defaultBase: string };
@@ -129,6 +135,10 @@ export const INVOKE_CHANNELS = [
 	'canvas:ensure-isolation',
 	'canvas:remove-isolation',
 	'canvas:force-states',
+	'comments:list',
+	'comments:save',
+	'comments:delete',
+	'comments:new',
 	'branch:list',
 	'branch:sources',
 	'branch:create',
