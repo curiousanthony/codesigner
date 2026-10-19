@@ -226,16 +226,24 @@
 			if (editor.textEditing.frameId === frameId && path.includes(editor.textEditing.id)) return;
 			editor.endTextEdit();
 		}
-		// Double-clicking the selected text layer edits it in place, like Framer.
+		// The first click of a double-click may still be selecting.
+		if (event.detail >= 2) await selecting;
 		const current = editor.selected;
+		// Double-clicking the selected instance of one of the project's components opens it, like Framer.
+		if (!container && event.detail >= 2 && current?.kind === 'instance' && editor.selection.frameId === frameId && path.at(-1) === current.id && !isComponentCanvas) {
+			if (editor.openComponent(current)) return;
+		}
+		// Double-clicking the selected text layer edits it in place, like Framer.
 		if (!container && event.detail >= 2 && current?.textEditable && editor.selection.frameId === frameId && path.includes(current.id)) {
 			void editor.startTextEdit(frameId, current.id);
 			return;
 		}
 		// Clicking the dimmed page around a component edited in place goes back to the page, like Framer.
 		if (path.length === 0 && editor.inPlace && !isComponentCanvas) return editor.exitInPlace();
-		await editor.selectFromHit(frameId, path, container ? 'container' : 'click', event.shiftKey);
+		selecting = editor.selectFromHit(frameId, path, container ? 'container' : 'click', event.shiftKey);
+		await selecting;
 	}
+	let selecting: Promise<void> = Promise.resolve();
 
 	// ------------------------------------------------------------ drawing
 	let dropPreview = $state<DropTarget | null>(null);

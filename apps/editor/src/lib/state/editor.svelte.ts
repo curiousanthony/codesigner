@@ -1253,6 +1253,32 @@ class EditorState {
 		setTimeout(() => void this.refreshSelectionInfo(), 120); // colors shown in the panel follow the theme
 	}
 
+	/** The project component an instance on the canvas renders, if it's one of the project's. */
+	componentOf(info: ElementInfo | null | undefined): ComponentInfo | null {
+		const tag = info?.componentTag;
+		if (!info || !tag) return null;
+		return (
+			this.components.find((c) => c.exportedAs.includes(tag)) ??
+			this.components.find((c) => c.name === tag) ??
+			this.components.find((c) => c.file === info.definitionFile) ??
+			null
+		);
+	}
+
+	/**
+	 * "Edit component" (button or double-click on an instance): its own canvas
+	 * (variants, states, props side by side), unless it needs data the canvas
+	 * can't invent (a list of cards…): then right here in the page, with real data.
+	 */
+	openComponent(info: ElementInfo | null | undefined): boolean {
+		const component = this.componentOf(info);
+		const file = component?.file ?? info?.definitionFile;
+		if (!file || file.includes('node_modules')) return false;
+		if (component && !buildCanvasSpec(component).missing.length) void this.editComponent(component);
+		else this.editInPlace(file);
+		return true;
+	}
+
 	/** Editing a component inside the page (scope is that component only, no route folder). */
 	get inPlace(): boolean {
 		return !this.editingComponent && this.scope.length > 0 && !this.scope.some((s) => s.endsWith('/'));

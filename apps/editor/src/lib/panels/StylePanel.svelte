@@ -54,7 +54,7 @@
 	} from '#lib/style/tailwind-map.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { breakpointLabel } from '#lib/canvas/breakpoints.js';
-	import { STATE_LABELS, STATE_PREFIX, buildCanvasSpec } from '#lib/state/component-canvas.js';
+	import { STATE_LABELS, STATE_PREFIX } from '#lib/state/component-canvas.js';
 
 	const info = $derived(editor.selected);
 	const multi = $derived(editor.selection.infos.length > 1);
@@ -78,16 +78,7 @@
 		});
 	});
 
-	const component = $derived.by((): ComponentInfo | null => {
-		if (!info?.componentTag) return null;
-		const tag = info.componentTag;
-		return (
-			editor.components.find((comp) => comp.exportedAs.includes(tag)) ??
-			editor.components.find((comp) => comp.name === tag) ??
-			editor.components.find((comp) => comp.file === info.definitionFile) ??
-			null
-		);
-	});
+	const component = $derived(editor.componentOf(info));
 
 	/** An instance of a component that takes no `class`: styling it here would write an ignored attribute. */
 	const classless = $derived(info?.kind === 'instance' && !!component && component.acceptsClass === false);
@@ -387,14 +378,8 @@
 		]);
 	}
 
-	/**
-	 * Components open on their own canvas (variants, states, props side by side),
-	 * unless they need data the canvas can't invent (a list of cards…): those are
-	 * edited right here in the page, with the page's real data.
-	 */
 	function editComponent() {
-		if (component && !buildCanvasSpec(component).missing.length) void editor.editComponent(component);
-		else if (component?.file ?? info?.definitionFile) editor.editInPlace((component?.file ?? info?.definitionFile)!);
+		editor.openComponent(info);
 	}
 
 	// ------------------------------------------------- component canvas
