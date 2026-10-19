@@ -110,6 +110,8 @@ class EditorState {
 	rightTab = $state<RightTab>('style');
 	tool = $state<Tool>('select');
 	spaceHeld = $state(false);
+	/** A component being dragged from the Assets panel onto the canvas. */
+	draggingComponent = $state<ComponentInfo | null>(null);
 	/** ⌥ held: measure from the selection to the hovered layer. */
 	altHeld = $state(false);
 	mode = $state<CanvasMode>('design');

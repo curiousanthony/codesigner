@@ -3,7 +3,7 @@
 	import type { Breakpoint, DropTarget, GuestToHost, NodeId, Rect } from '@codesigner/protocol';
 	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
 	import { editor, isDrawTool } from '#lib/state/editor.svelte.js';
-	import { drawLayer, moveLayer } from '#lib/state/commands.js';
+	import { drawLayer, insertComponent, moveLayer } from '#lib/state/commands.js';
 	import { invoke } from '#lib/api.js';
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
@@ -331,6 +331,37 @@
 		void drawLayer(tool, frameId, target, size);
 	}
 
+	// ------------------------------------------ components from Assets
+	function ondragover(event: DragEvent) {
+		if (!editor.draggingComponent || isComponentCanvas) return;
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+		const p = toGuest(event);
+		void previewComponentDrop(p.x, p.y);
+	}
+	let componentDropSeq = 0;
+	let componentDrop = $state<DropTarget | null>(null);
+	async function previewComponentDrop(x: number, y: number) {
+		const seq = ++componentDropSeq;
+		const target = (await client?.dropTarget(x, y)) ?? null;
+		if (seq === componentDropSeq && editor.draggingComponent) componentDrop = target;
+	}
+	async function ondrop(event: DragEvent) {
+		const component = editor.draggingComponent;
+		editor.draggingComponent = null;
+		componentDropSeq++;
+		componentDrop = null;
+		if (!component || !client) return;
+		event.preventDefault();
+		const p = toGuest(event);
+		const target = await client.dropTarget(p.x, p.y);
+		if (!target) return void editor.toast(m.draw_no_container());
+		void insertComponent(component, frameId, target);
+	}
+	$effect(() => {
+		if (!editor.draggingComponent) componentDrop = null;
+	});
+
 	function onwheel(event: WheelEvent) {
 		if (event.ctrlKey || event.metaKey || !client) return; // zoom is handled by the canvas
 		event.preventDefault();
@@ -570,8 +601,11 @@
 		<div
 			bind:this={gesture}
 			class="absolute inset-0 z-10"
-			style="pointer-events:{designMode || drawing ? 'auto' : 'none'}; cursor:{drawing ? 'crosshair' : designMode ? 'default' : 'auto'}"
+			style="pointer-events:{designMode || drawing || editor.draggingComponent ? 'auto' : 'none'}; cursor:{drawing ? 'crosshair' : designMode ? 'default' : 'auto'}"
 			role="presentation"
+			{ondragover}
+			{ondrop}
+			ondragleave={() => ((componentDropSeq++), (componentDrop = null))}
 			{onpointerdown}
 			{onpointerup}
 			{onpointermove}
@@ -622,11 +656,12 @@
 					</span>
 				{/if}
 			{/each}
-			{#if drawing && dropPreview}
-				{@const p = dropPreview.parentRect}
+			{#if (drawing && dropPreview) || componentDrop}
+				{@const target = (componentDrop ?? dropPreview)!}
+				{@const p = target.parentRect}
 				<div class="absolute" style="left:{p.x}px; top:{p.y}px; width:{p.width}px; height:{p.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);"></div>
-				{#if dropPreview.line}
-					{@const l = dropPreview.line}
+				{#if target.line}
+					{@const l = target.line}
 					{@const vertical = l.height > l.width}
 					<div class="absolute bg-accent" style="left:{l.x}px; top:{l.y}px; width:{vertical ? 'calc(2px * var(--inv))' : l.width + 'px'}; height:{vertical ? l.height + 'px' : 'calc(2px * var(--inv))'};"></div>
 				{/if}

@@ -19,6 +19,7 @@ import type {
 } from '@codesigner/protocol';
 import { locKey } from '@codesigner/protocol';
 import { SvelteDoc, type ElementLike, type Located } from './svelte/doc.js';
+import { ensureImport } from './svelte/imports.js';
 import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
 import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
@@ -241,7 +242,22 @@ export class Workspace {
 				const entry = texts.get(file) ?? { before: this.read(file), current: this.read(file) };
 				const previous = entry.current;
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
-				if (op.type === 'insert') created.push(insertedAt(file, previous, entry.current, op.markup));
+				if (op.type === 'insert') {
+					let loc = insertedAt(file, previous, entry.current, op.markup);
+					if (op.imports?.length) {
+						// Imports go in after locating the markup (the script usually sits above it, shifting lines).
+						const before = entry.current;
+						const doc = new SvelteDoc(before);
+						const s = new MagicString(before);
+						for (const spec of op.imports) ensureImport(doc, s, spec);
+						entry.current = s.toString();
+						const at = doc.offsetOf(loc.line, loc.column);
+						let changedAt = 0;
+						while (changedAt < before.length && before[changedAt] === entry.current[changedAt]) changedAt++;
+						if (changedAt <= at) loc = { ...loc, line: loc.line + entry.current.split('\n').length - before.split('\n').length };
+					}
+					created.push(loc);
+				}
 				if (op.type === 'move') created.push(insertedAt(file, previous, entry.current, previous.split('\n')[op.target.line - 1].slice(op.target.column)));
 				texts.set(file, entry);
 			}

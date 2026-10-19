@@ -150,6 +150,30 @@ describe('structure', () => {
 		expect(result.created).toEqual([loc('<p>B')]);
 	});
 
+	test('inserts a component with its import (dropped from Assets)', async () => {
+		const page = 'src/routes/test/assets.svelte';
+		const { writeFileSync } = await import('node:fs');
+		const text = () => readFileSync(join(project.dir, page), 'utf8');
+		writeFileSync(join(project.dir, page), "<script lang=\"ts\">\n\timport { Badge } from '$lib/components/ui/badge';\n</script>\n\n<div class=\"flex\">\n\t<Badge>New</Badge>\n</div>\n");
+		const parent = () => locOf(text(), '<div', page);
+		// Named import from a module already imported from: merged into its braces.
+		await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: parent(), index: -1, markup: '<Badge>Two</Badge>', imports: [{ kind: 'named', local: 'Badge', from: '$lib/components/ui/badge' }] }] });
+		expect(text().match(/import/g)?.length).toBe(1);
+		let result = await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: parent(), index: -1, markup: '<Button>Button</Button>', imports: [{ kind: 'named', local: 'Button', from: '$lib/components/ui/button' }] }] });
+		expect(text()).toContain("\timport { Badge } from '$lib/components/ui/badge';\n\timport { Button } from '$lib/components/ui/button';\n");
+		expect(result.created).toEqual([locOf(text(), '<Button>', page)]);
+		result = await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: parent(), index: -1, markup: '<Card.Root>Card</Card.Root>', imports: [{ kind: 'namespace', local: 'Card', from: '$lib/components/ui/card' }] }] });
+		expect(text()).toContain("import * as Card from '$lib/components/ui/card';");
+		expect(result.created).toEqual([locOf(text(), '<Card.Root>', page)]);
+		// No script at all: one is created.
+		const bare = 'src/routes/test/bare.svelte';
+		writeFileSync(join(project.dir, bare), '<main class="p-4"></main>\n');
+		result = await ws.apply({ label: 'insert', ops: [{ type: 'insert', parent: locOf('<main class="p-4"></main>\n', '<main', bare), index: -1, markup: '<NavItem />', imports: [{ kind: 'default', local: 'NavItem', from: '$lib/components/app/NavItem.svelte' }] }] });
+		const bareText = readFileSync(join(project.dir, bare), 'utf8');
+		expect(bareText.startsWith("<script>\n\timport NavItem from '$lib/components/app/NavItem.svelte';\n</script>\n\n<main")).toBe(true);
+		expect(result.created).toEqual([locOf(bareText, '<NavItem', bare)]);
+	});
+
 	test('reports where a drawn layer landed next to look-alike siblings', async () => {
 		const page = 'src/routes/test/look-alike.svelte';
 		const { writeFileSync } = await import('node:fs');

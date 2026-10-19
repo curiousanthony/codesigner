@@ -1,4 +1,4 @@
-import type { DropTarget, SourceLoc } from '@codesigner/protocol';
+import type { ComponentInfo, DropTarget, ImportSpec, SourceLoc } from '@codesigner/protocol';
 import { editor, type DrawTool } from './editor.svelte.js';
 import { spacing } from '#lib/style/tailwind-map.js';
 import { invoke } from '#lib/api.js';
@@ -135,6 +135,30 @@ export async function pasteStyle() {
 		}))
 	);
 	await editor.edit(m.edit_paste_style(), ops);
+}
+
+/** How a page imports a component: `Card.Title` → `* as Card` from its folder, shadcn roots by name, other files by default. */
+export function importFor(component: ComponentInfo): ImportSpec {
+	if (component.name.includes('.')) {
+		return { kind: 'namespace', local: component.name.split('.')[0], from: component.importPath.replace(/\/[^/]+\.svelte$/, '') };
+	}
+	if (component.exportedAs.includes(`${component.name}.Root`)) return { kind: 'named', local: component.name, from: component.importPath };
+	return { kind: 'default', local: component.name, from: component.importPath };
+}
+
+/** Markup for a newly placed component: with its name as text when it takes children. */
+export function componentMarkup(component: ComponentInfo): string {
+	const takesChildren = component.props.some((p) => p.name === 'children');
+	return takesChildren ? `<${component.name}>${component.name.split('.').at(-1)}</${component.name}>` : `<${component.name} />`;
+}
+
+/** Drops a component from Assets into the container under the pointer (adds its import), then selects it. */
+export async function insertComponent(component: ComponentInfo, frameId: string, target: DropTarget) {
+	const result = await editor.editWithResult(m.edit_insert({ kind: component.name }), [
+		{ type: 'insert', parent: target.parent, index: -1, markup: componentMarkup(component), anchor: target.anchor ?? undefined, imports: [importFor(component)] }
+	]);
+	const loc = result?.created?.[0];
+	if (loc) pendingSelect({ ...loc, tag: component.name }, frameId);
 }
 
 export async function unwrapSelection() {

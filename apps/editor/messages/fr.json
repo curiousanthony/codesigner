@@ -18,6 +18,7 @@
 	"assets_colors": "Couleurs",
 	"assets_components": "Composants",
 	"assets_dark": "Sombre",
+	"assets_drag_hint": "Glissez sur le canevas pour l’insérer · {path}",
 	"assets_light": "Clair",
 	"assets_no_components": "Aucun composant trouvé dans src/lib.",
 	"assets_no_tokens": "Aucun token de couleur trouvé dans votre feuille de style.",

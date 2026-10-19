@@ -34,6 +34,8 @@ export type EditOp =
 			markup: string;
 			/** Insert next to this layer instead (its enclosing child of `parent`); wins over `index`. */
 			anchor?: { target: SourceLoc; position: 'before' | 'after' };
+			/** Imports the markup needs (a component dropped from Assets), added to the script when missing. */
+			imports?: ImportSpec[];
 	  }
 	| { type: 'remove'; targets: SourceLoc[] }
 	| { type: 'duplicate'; targets: SourceLoc[] }
@@ -56,6 +58,16 @@ export type EditOp =
 			add: string[];
 	  }
 	| { type: 'add-variant'; file: string; axis: string; value: string; copyFrom?: string };
+
+/** `import { Button } …`, `import * as Card …` or `import NavItem …` for markup that uses a component. */
+export interface ImportSpec {
+	kind: 'named' | 'namespace' | 'default';
+	/** Name used in the markup (`Button`, `Card`, `NavItem`). */
+	local: string;
+	/** Exported name when it differs from `local` (named imports only). */
+	imported?: string;
+	from: string;
+}
 
 export interface EditRequest {
 	/** Human label used for undo history and checkpoint commits, e.g. "Change gap". */

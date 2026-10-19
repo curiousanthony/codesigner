@@ -113,7 +113,19 @@
 			{#each groups as [group, components] (group)}
 				<p class="px-2 pt-1.5 pb-1 text-[11px] text-muted">{group}</p>
 				{#each components as component (component.file)}
-					<div class="flex h-[30px] items-center gap-2 rounded-control px-2 hover:bg-row-hover" title={component.importPath}>
+					<div
+						class="flex h-[30px] cursor-grab items-center gap-2 rounded-control px-2 hover:bg-row-hover"
+						title={m.assets_drag_hint({ path: component.importPath })}
+						role="listitem"
+						draggable="true"
+						data-component={component.name}
+						ondragstart={(e) => {
+							editor.draggingComponent = component;
+							e.dataTransfer?.setData('text/plain', component.name);
+							if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+						}}
+						ondragend={() => (editor.draggingComponent = null)}
+					>
 						<Component class="size-3.5 shrink-0 text-component" strokeWidth={1.75} />
 						<span class="min-w-0 flex-1 truncate">{component.name}</span>
 						{#if component.variants.length}

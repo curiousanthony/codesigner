@@ -18,6 +18,7 @@
 	"assets_colors": "Colors",
 	"assets_components": "Components",
 	"assets_dark": "Dark",
+	"assets_drag_hint": "Drag onto the canvas to insert · {path}",
 	"assets_light": "Light",
 	"assets_no_components": "No components found in src/lib.",
 	"assets_no_tokens": "No color tokens found in your stylesheet.",
