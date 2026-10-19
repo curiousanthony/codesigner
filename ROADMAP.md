@@ -61,10 +61,10 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ States on page elements: Default / Hover / Pressed / Focus picker in the Style panel forces the state on the selection in every breakpoint (CDP) and edits write `hover:` / `active:` / `focus-visible:`
 - ✅ Color picker: token swatches with search and an opacity modifier (`bg-primary/80`), custom colors with saturation/brightness, hue and alpha (one write on release), hex input; opens upwards near the bottom
 - ⬜ Color picker: rgb/hsl/oklch input modes, eyedropper
-- ⬜ Scrub-to-change numeric inputs, arrow keys ±1 / shift ±10
+- ✅ Scrub-to-change numeric inputs (drag the field), arrow keys ±1 / ⇧ ±10 / ⌥ ±0.1, math in fields
 - ⬜ Smart guides, ⌥ distance measurement, padding/gap handles on canvas
-- ⬜ Interact mode (use the app normally) vs Design mode toggle
-- ⬜ Optimistic preview CSS during drags (one file write on release)
+- ✅ Interact mode (use the app normally, `⌘E`) vs Design mode toggle
+- ✅ Optimistic preview CSS during scrubs (one file write on release)
 
 ## M3 — Components & tokens 🚧
 
