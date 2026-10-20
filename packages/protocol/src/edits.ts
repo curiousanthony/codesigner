@@ -23,6 +23,8 @@ export type EditOp =
 			value: string | number | boolean | null;
 			/** "expression" writes name={value}; "string" writes name="value". */
 			kind?: 'string' | 'expression';
+			/** Imports the expression needs (e.g. the icon component it names). */
+			imports?: ImportSpec[];
 	  }
 	| { type: 'wrap'; targets: SourceLoc[]; tag: string; className: string }
 	| { type: 'unwrap'; target: SourceLoc }

@@ -1,6 +1,6 @@
 import { readFileSync, watch, type FSWatcher } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Workspace } from '@codesigner/engine';
+import { Workspace, scanIcons } from '@codesigner/engine';
 import type { handle as handleFn } from './ipc.js';
 
 const workspaces = new Map<string, Workspace>();
@@ -112,4 +112,5 @@ export function registerSourceHandlers(
 	});
 
 	handle('project:components', (worktree) => workspaceFor(worktree).components());
+	handle('project:icons', (worktree) => scanIcons(resolve(worktree)));
 }

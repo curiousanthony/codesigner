@@ -13,7 +13,7 @@ import type {
 } from './project.js';
 import type { CodeWriteRequest, CodeWriteResult, EditRequest, EditResult, ElementSource, FileChange } from './edits.js';
 import type { DesignTokens, TokenEdit } from './tokens.js';
-import type { ComponentInfo, ImageAsset } from './components.js';
+import type { ComponentInfo, IconLibrary, ImageAsset } from './components.js';
 import type { SourceLoc } from './bridge.js';
 
 export interface AppInfo {
@@ -55,6 +55,8 @@ export interface InvokeMap {
 	'project:routes': (worktree: string) => RouteInfo[];
 	'project:components': (worktree: string) => ComponentInfo[];
 	'project:images': (worktree: string) => ImageAsset[];
+	/** The icon library installed in the project (lucide), or null. */
+	'project:icons': (worktree: string) => IconLibrary | null;
 	'project:reveal': (path: string) => void;
 	'project:open-in-editor': (file: string, line?: number, column?: number) => void;
 	/**
@@ -137,6 +139,7 @@ export const INVOKE_CHANNELS = [
 	'project:routes',
 	'project:components',
 	'project:images',
+	'project:icons',
 	'project:reveal',
 	'project:open-in-editor',
 	'canvas:ensure-isolation',

@@ -177,6 +177,18 @@ export class Workspace {
 		return { ...op, markup, imports };
 	}
 
+	/** An attribute's imports (an icon component): renamed when the name is taken, the attribute's expression following. */
+	private withResolvedAttributeImports(doc: SvelteDoc, op: Extract<EditOp, { type: 'attribute' }>): { op: Extract<EditOp, { type: 'attribute' }>; imports: ImportSpec[] } {
+		let value = op.value;
+		const imports: ImportSpec[] = [];
+		for (const spec of op.imports ?? []) {
+			const resolved = resolveImport(doc, spec);
+			if (value === spec.local) value = resolved.local;
+			if (!resolved.present) imports.push({ kind: resolved.kind, local: resolved.local, from: resolved.from, ...(resolved.imported ? { imported: resolved.imported } : {}) });
+		}
+		return { op: { ...op, value, imports: undefined }, imports };
+	}
+
 	/** Index among `parent`'s children for an insert/move next to `anchor` (its enclosing child: it may sit in an {#if}/{#each}). */
 	private anchorIndex(doc: SvelteDoc, parent: ElementLike | null, index: number, anchor: { target: SourceLoc; position: 'before' | 'after' } | undefined, skip?: ElementLike): number {
 		if (!anchor) return index;
@@ -257,6 +269,7 @@ export class Workspace {
 	async apply(request: EditRequest): Promise<EditResult> {
 		const warnings: string[] = [];
 		const created: SourceLoc[] = [];
+		const relocated: Record<string, SourceLoc> = {};
 		const texts = new Map<string, { before: string; current: string; created?: boolean }>();
 		try {
 			for (let op of request.ops) {
@@ -265,7 +278,27 @@ export class Workspace {
 				const entry = texts.get(file) ?? { before: this.read(file), current: this.read(file) };
 				const previous = entry.current;
 				if (op.type === 'insert' && op.imports?.length) op = this.withResolvedImports(new SvelteDoc(previous), op);
+				// An attribute naming an import (an icon component): swap the import with the value.
+				let attributeImports: ImportSpec[] | null = null;
+				let replaced: string | null = null;
+				if (op.type === 'attribute' && op.imports) {
+					const doc = new SvelteDoc(previous);
+					replaced = identifierAttribute(this.locate(doc, op.target).node, op.name);
+					({ op, imports: attributeImports } = this.withResolvedAttributeImports(doc, op));
+				}
 				entry.current = await this.applyOp(new SvelteDoc(entry.current), op, warnings);
+				if (attributeImports && op.type === 'attribute') {
+					let loc = op.target;
+					if (replaced && replaced !== op.value) {
+						const cleaned = removeUnusedImports(new SvelteDoc(entry.current), [replaced]);
+						loc = { ...loc, line: loc.line + cleaned.split('\n').length - entry.current.split('\n').length };
+						entry.current = cleaned;
+					}
+					// Import lines usually sit above the layer: say where it went so the editor can keep it selected.
+					const withImports = addImports(entry.current, attributeImports, loc);
+					entry.current = withImports.text;
+					if (withImports.loc.line !== op.target.line) relocated[`${file}:${op.target.line}:${op.target.column}`] = withImports.loc;
+				}
 				if (op.type === 'insert') {
 					// Imports go in after locating the markup (the script usually sits above it, shifting lines).
 					const withImports = addImports(entry.current, op.imports ?? [], insertedAt(file, previous, entry.current, op.markup));
@@ -302,7 +335,7 @@ export class Workspace {
 			changes.push({ file, before, after: current, ...(isNew ? { created: true } : {}) });
 		}
 		if (changes.length) this.record(request, changes);
-		return { ok: true, changes, warnings, ...(created.length ? { created } : {}) };
+		return { ok: true, changes, warnings, ...(created.length ? { created } : {}), ...(Object.keys(relocated).length ? { relocated } : {}) };
 	}
 
 	/**
@@ -518,6 +551,14 @@ function insertedAt(file: string, before: string, after: string, markup: string)
 	if (start < 0) start = after.indexOf('<', prefix);
 	const lines = after.slice(0, start).split('\n');
 	return { file, line: lines.length, column: lines[lines.length - 1].length };
+}
+
+/** The identifier an attribute passes (`icon={House}` gives "House"), or null. */
+function identifierAttribute(node: ElementLike, name: string): string | null {
+	const attribute = (node.attributes as { type: string; name?: string; value?: unknown }[]).find((a) => a.type === 'Attribute' && a.name === name);
+	const value = Array.isArray(attribute?.value) ? attribute.value[0] : attribute?.value;
+	const expression = (value as { type?: string; expression?: { type: string; name?: string } } | undefined)?.expression;
+	return value && (value as { type: string }).type === 'ExpressionTag' && expression?.type === 'Identifier' ? (expression.name ?? null) : null;
 }
 
 /** Adds imports to a file and shifts `loc` (a layer in its markup) by the lines they add above it. */

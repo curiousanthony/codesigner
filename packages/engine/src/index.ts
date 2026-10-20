@@ -14,3 +14,4 @@ export { findTv } from './svelte/variants.js';
 export * from './versions.js';
 export * from './images.js';
 export * from './comments.js';
+export * from './icons.js';

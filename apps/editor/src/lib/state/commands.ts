@@ -300,8 +300,8 @@ export async function duplicateSelection() {
 	await editor.edit(m.edit_duplicate(), [{ type: 'duplicate', targets: targets() }]);
 }
 
-/** After an edit that creates a layer, select it once the page has hot-reloaded. */
-function pendingSelect(loc: SourceLoc, inFrame?: string, then?: (id: string) => void) {
+/** After an edit that creates (or moves) a layer, select it once the page has hot-reloaded. */
+export function pendingSelect(loc: SourceLoc, inFrame?: string, then?: (id: string) => void) {
 	const frameId = inFrame ?? editor.selection.frameId ?? editor.primaryFrameId;
 	if (!frameId) return;
 	const frame = editor.frames.get(frameId);

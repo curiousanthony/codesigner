@@ -26,7 +26,8 @@ import type {
 	SourceBranch,
 	SourceLoc,
 	Version,
-	UpdateInfo
+	UpdateInfo,
+	IconLibrary
 } from '@codesigner/protocol';
 import { errorCode, errorMessage, inDesktop, invoke, on } from '#lib/api.js';
 import type { BridgeClient } from '#lib/canvas/bridge-client.js';
@@ -108,6 +109,8 @@ class EditorState {
 	routes = $state<RouteInfo[]>([]);
 	components = $state<ComponentInfo[]>([]);
 	images = $state<ImageAsset[]>([]);
+	/** The project's icon library, loaded the first time an icon picker opens (undefined: not loaded yet). */
+	icons = $state.raw<IconLibrary | null | undefined>(undefined);
 	tokens = $state<DesignTokens | null>(null);
 	currentPath = $state('/');
 	currentTitle = $state('');
@@ -563,6 +566,7 @@ class EditorState {
 		this.exitComponent();
 		if (this.worktree && this.worktree !== worktree) void invoke('devserver:stop', this.worktree);
 		this.worktree = worktree;
+		this.icons = undefined;
 		this.selection = EMPTY_SELECTION;
 		const branch = this.branches.find((b) => b.worktree === worktree && !b.isMainCheckout);
 		if (branch && branch.name !== this.project?.settings.lastBranch) void this.updateSettings({ lastBranch: branch.name });
@@ -592,6 +596,12 @@ class EditorState {
 			this.components = [];
 		}
 		this.images = await invoke('project:images', this.worktree).catch(() => []);
+	}
+
+	async loadIcons(): Promise<IconLibrary | null> {
+		if (this.icons !== undefined || !this.worktree) return this.icons ?? null;
+		this.icons = await invoke('project:icons', this.worktree).catch(() => null);
+		return this.icons;
 	}
 
 	async refreshRoutes() {

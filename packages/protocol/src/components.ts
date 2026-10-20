@@ -61,3 +61,17 @@ export interface ImageAsset {
 	kind: 'static' | 'lib';
 	src: string;
 }
+
+/** An icon component the project can import, with its SVG drawing for previews. */
+export interface IconInfo {
+	/** Exported component name, e.g. `House`. */
+	name: string;
+	/** Lucide-style icon node: `[tag, attributes][]` drawn in a 24×24 stroke viewBox. */
+	node: [string, Record<string, string>][];
+}
+
+export interface IconLibrary {
+	/** Module the icons are imported from, e.g. `@lucide/svelte`. */
+	from: string;
+	icons: IconInfo[];
+}

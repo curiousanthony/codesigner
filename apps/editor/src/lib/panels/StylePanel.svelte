@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ElementInfo, ElementSource, EditOp, ComponentInfo } from '@codesigner/protocol';
+	import type { ElementInfo, ElementSource, EditOp, ComponentInfo, ImportSpec } from '@codesigner/protocol';
 	import {
 		ArrowRight,
 		ArrowDown,
@@ -24,6 +24,8 @@
 	import SelectField from '#lib/ui/SelectField.svelte';
 	import Segmented from '#lib/ui/Segmented.svelte';
 	import TextField from '#lib/ui/TextField.svelte';
+	import IconField from '#lib/ui/IconField.svelte';
+	import { pendingSelect } from '#lib/state/commands.js';
 	import ColorField, { type ColorChoice, type ColorOption } from '#lib/ui/ColorField.svelte';
 	import {
 		activePrefix,
@@ -432,6 +434,16 @@
 		]);
 	}
 
+	/** Passes an icon component (`icon={House}`) imported from the project's icon library; keeps the instance selected when the import shifts it down. */
+	async function setIcon(name: string, icon: { name: string; from: string } | null) {
+		if (!info?.loc) return;
+		const target = { ...info.loc, tag: info.componentTag ?? info.tag };
+		const imports: ImportSpec[] = icon ? [{ kind: 'named', local: icon.name, from: icon.from }] : [];
+		const result = await editor.editWithResult(m.edit_prop({ name }), [{ type: 'attribute', target, name, value: icon?.name ?? null, kind: 'expression', imports }]);
+		const moved = result?.relocated?.[`${target.file}:${target.line}:${target.column}`];
+		if (moved) pendingSelect(moved);
+	}
+
 	function editComponent() {
 		editor.openComponent(info);
 	}
@@ -574,7 +586,9 @@
 				{@const current = attr(prop.name)}
 				{@const spread = source?.attributes.find((a) => a.kind === 'spread')}
 				<Row label={prop.name} hint={prop.type ?? undefined}>
-					{#if !current && spread}
+					{#if prop.control === 'icon' && ((!current && !spread) || (current?.kind === 'expression' && /^[A-Z]\w*$/.test(current.value)))}
+						<IconField value={current?.value ?? null} load={() => editor.loadIcons()} label={prop.name} onchange={(icon) => setIcon(prop.name, icon)} />
+					{:else if !current && spread}
 						<code class="truncate rounded-control bg-control px-2 py-1.5 font-mono text-[10.5px] text-muted" title={m.component_from_spread()}>{spread.value}</code>
 					{:else if current?.kind === 'expression'}
 						<code class="truncate rounded-control bg-control px-2 py-1.5 font-mono text-[10.5px] text-label" title={current.value}>{`{${current.value}}`}</code>
