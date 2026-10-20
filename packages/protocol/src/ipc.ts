@@ -103,6 +103,8 @@ export interface InvokeMap {
 
 	'tokens:read': (worktree: string) => DesignTokens;
 	'tokens:edit': (worktree: string, edit: TokenEdit) => DesignTokens;
+	/** A new color token: light (and dark) value plus its @theme alias. */
+	'tokens:add': (worktree: string, token: { name: string; light: string; dark?: string | null }) => DesignTokens;
 }
 
 /** Push events from the main process to the editor. */
@@ -168,7 +170,8 @@ export const INVOKE_CHANNELS = [
 	'source:redo',
 	'source:preview-css',
 	'tokens:read',
-	'tokens:edit'
+	'tokens:edit',
+	'tokens:add'
 ] as const satisfies readonly (keyof InvokeMap)[];
 
 export const EVENT_CHANNELS = [

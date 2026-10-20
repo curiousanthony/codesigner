@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { DesignToken } from '@codesigner/protocol';
-	import { Component, ChevronRight, Search, Palette } from '@lucide/svelte';
+	import { Component, ChevronRight, Search, Palette, Plus } from '@lucide/svelte';
 	import { TEXT_SIZES } from '#lib/style/tailwind-map.js';
 	import { editor } from '#lib/state/editor.svelte.js';
 	import { invoke, errorMessage } from '#lib/api.js';
@@ -66,6 +66,23 @@
 			await new Promise((r) => setTimeout(r, 50));
 		}
 		editor.styleCommands?.typography(kind, value);
+	}
+
+	// New color token: light value, dark value when the theme has a dark scope.
+	let adding = $state<{ name: string; light: string; dark: string } | null>(null);
+	const tokenScopes = $derived<('light' | 'dark')[]>(editor.tokens?.darkSelector ? ['light', 'dark'] : ['light']);
+	const slug = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+	async function addToken(event: SubmitEvent) {
+		event.preventDefault();
+		if (!adding || !editor.worktree || !slug(adding.name)) return;
+		const { name, light, dark } = adding;
+		try {
+			editor.tokens = await invoke('tokens:add', editor.worktree, { name: slug(name), light, dark: editor.tokens?.darkSelector ? dark : null });
+			adding = null;
+			editor.toast(m.assets_token_added({ name: slug(name) }), 'success');
+		} catch (error) {
+			editor.toast(errorMessage(error), 'error');
+		}
 	}
 
 	/** Resolves a var() chain to a concrete value for the swatch. */
@@ -228,6 +245,29 @@
 		{#if open.colors}
 			{#if editor.tokens?.file}
 				<p class="truncate px-2 pb-1 text-[10px] text-muted">{editor.tokens.file}</p>
+			{/if}
+			{#if adding}
+				<form class="mb-1 flex flex-col gap-1.5 rounded-control bg-row-hover p-2" onsubmit={addToken}>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input class="h-7 rounded-[6px] bg-control px-2 outline-none placeholder:text-muted" placeholder={m.assets_token_name()} bind:value={adding.name} autofocus
+						onkeydown={(e) => e.key === 'Escape' && (adding = null)} />
+					{#each tokenScopes as scope (scope)}
+						<label class="grid grid-cols-[40px_22px_1fr] items-center gap-1.5">
+							<span class="text-[11px] text-label">{scope === 'light' ? m.assets_light() : m.assets_dark()}</span>
+							<input type="color" class="size-[22px] cursor-pointer rounded-[5px] border-0 bg-transparent p-0" bind:value={adding[scope]} aria-label={scope} />
+							<input class="h-7 min-w-0 rounded-[6px] bg-control px-2 font-mono text-[11px] outline-none" bind:value={adding[scope]} />
+						</label>
+					{/each}
+					<div class="flex justify-end gap-1">
+						<button type="button" class="h-7 rounded-[6px] px-2 text-label hover:bg-control" onclick={() => (adding = null)}>{m.action_cancel()}</button>
+						<button type="submit" class="h-7 rounded-[6px] bg-accent px-2.5 text-white disabled:opacity-50" disabled={!slug(adding.name)}>{m.action_add()}</button>
+					</div>
+				</form>
+			{:else if editor.tokens?.file}
+				<button type="button" class="flex h-[30px] w-full items-center gap-2 rounded-control px-2 text-left text-accent hover:bg-row-hover"
+					onclick={() => (adding = { name: '', light: '#0099ff', dark: '#33aaff' })}>
+					<Plus class="size-3.5" />{m.assets_new_color()}
+				</button>
 			{/if}
 			{#each colorTokens as token (token.name)}
 				{@const expanded = expandedToken === token.name}

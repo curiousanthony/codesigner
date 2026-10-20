@@ -26,7 +26,7 @@ import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
 import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
 import { addVariantValue, editVariantClasses } from './svelte/variants.js';
-import { applyTokenEdit, parseTokens } from './tokens.js';
+import { addColorToken, applyTokenEdit, parseTokens } from './tokens.js';
 import { scanComponents } from './components.js';
 import { detectProject } from './project.js';
 
@@ -468,6 +468,20 @@ export class Workspace {
 			this.write(this.cssEntry, after);
 			this.record({ label: `Change ${edit.name}`, ops: [], coalesce: false }, [{ file: this.cssEntry, before, after }]);
 		}
+		return parseTokens(after, this.cssEntry);
+	}
+
+	addToken(token: { name: string; light: string; dark?: string | null }): DesignTokens {
+		if (!this.cssEntry) throw new EditError('No global stylesheet found for design tokens');
+		const before = this.read(this.cssEntry);
+		let after: string;
+		try {
+			after = addColorToken(before, token);
+		} catch (error) {
+			throw new EditError((error as Error).message);
+		}
+		this.write(this.cssEntry, after);
+		this.record({ label: `Add ${token.name}`, ops: [], coalesce: false }, [{ file: this.cssEntry, before, after }]);
 		return parseTokens(after, this.cssEntry);
 	}
 

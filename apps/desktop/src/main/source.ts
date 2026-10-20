@@ -105,5 +105,11 @@ export function registerSourceHandlers(
 		return tokens;
 	});
 
+	handle('tokens:add', (worktree, token) => {
+		const tokens = workspaceFor(worktree).addToken(token);
+		if (tokens.file) onChanged(worktree, [tokens.file]);
+		return tokens;
+	});
+
 	handle('project:components', (worktree) => workspaceFor(worktree).components());
 }

@@ -169,3 +169,45 @@ export function applyTokenEdit(css: string, edit: TokenEdit): string {
 	rule.append(postcss.decl({ prop: edit.name, value: edit.value, raws: last ? { before: last.raws.before, between: last.raws.between } : {} }));
 	return root.toString();
 }
+
+/**
+ * Adds a color token the way shadcn themes declare them: the value in the light
+ * scope, its dark value (when the stylesheet has a dark scope), and a
+ * `--color-<name>` alias in @theme so Tailwind makes `bg-<name>`, `text-<name>`…
+ */
+export function addColorToken(css: string, token: { name: string; light: string; dark?: string | null }): string {
+	const name = token.name.replace(/^--/, '');
+	if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error('Token names use lowercase letters, digits and dashes (e.g. brand-accent)');
+	for (const v of [token.light, token.dark ?? '']) if (/[;{}]/.test(v)) throw new Error('Token values cannot contain ; { or }');
+	if (!token.light.trim()) throw new Error('A color token needs a value');
+	const root = postcss.parse(css);
+	const declared = new Set<string>();
+	root.walkDecls((d) => void declared.add(d.prop));
+	if (declared.has(`--${name}`) || declared.has(`--color-${name}`)) throw new Error(`A token named ${name} already exists`);
+
+	const append = (container: postcss.Container, prop: string, value: string) => {
+		const last = container.nodes?.filter((n) => n.type === 'decl').at(-1) as Declaration | undefined;
+		container.append(postcss.decl({ prop, value, raws: last ? { before: last.raws.before, between: last.raws.between } : { before: '\n\t', between: ': ' } }));
+	};
+	const ruleFor = (selectors: string[]) =>
+		root.nodes.find((n) => n.type === 'rule' && selectors.includes((n as postcss.Rule).selector.trim())) as postcss.Rule | undefined;
+
+	let light = ruleFor(LIGHT_SELECTORS);
+	if (!light) {
+		light = postcss.rule({ selector: ':root', raws: { between: ' ', after: '\n' } });
+		root.append(light);
+	}
+	append(light, `--${name}`, token.light.trim());
+	const dark = ruleFor(DARK_SELECTORS);
+	if (dark && token.dark?.trim()) append(dark, `--${name}`, token.dark.trim());
+
+	const themes = root.nodes.filter((n) => n.type === 'atrule' && (n as postcss.AtRule).name === 'theme') as postcss.AtRule[];
+	let theme = themes.find((t) => t.params.trim() === 'inline') ?? themes[0];
+	if (!theme) {
+		theme = postcss.atRule({ name: 'theme', params: 'inline', raws: { afterName: ' ', between: ' ', after: '\n' } });
+		root.append(theme);
+	}
+	append(theme, `--color-${name}`, `var(--${name})`);
+	return root.toString();
+}
+

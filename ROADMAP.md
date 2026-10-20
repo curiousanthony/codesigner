@@ -78,7 +78,7 @@ Tried on the real SaaS (all undone, worktree clean): hover state and `dark:` edi
 
 - ✅ Assets panel: components (grouped, e.g. `ui/`), color tokens (light/dark), images in `static/` and `src/lib/assets` with thumbnails; all draggable onto the canvas
 - ✅ Assets: Typography (theme fonts and text sizes with a live sample; click applies to the selection)
-- ⬜ Design tokens editor: light/dark values from `:root` / `.dark` / `@theme`, alias chains, add a token
+- ✅ Design tokens editor: light/dark values from `:root` / `.dark` / `@theme`, alias chains; New color adds the light and dark values plus the `@theme` alias, so `bg-<name>` works right away (undoable)
 - ⬜ Component instance panel: props from `$props()` and variants from `tv()` (Variant dropdown, Text, Boolean, Icon…)
 - ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`
 - ✅ Component isolation page served by the app's own dev server (git-ignored route `src/routes/__codesigner`, root layout only)
