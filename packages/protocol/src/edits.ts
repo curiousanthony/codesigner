@@ -59,7 +59,9 @@ export type EditOp =
 	  }
 	| { type: 'add-variant'; file: string; axis: string; value: string; copyFrom?: string }
 	/** Create component from the selection: moves the markup to `file`, leaves `<Name …props />` and its import. */
-	| { type: 'extract-component'; target: SourceLoc; name: string; file: string; importPath: string };
+	| { type: 'extract-component'; target: SourceLoc; name: string; file: string; importPath: string }
+	/** Framer's "expose property": a static text or attribute inside a component becomes a prop (default: the current value). */
+	| { type: 'expose-prop'; target: SourceLoc; prop: string; from: 'text' | { attribute: string } };
 
 /** `import { Button } …`, `import * as Card …` or `import NavItem …` for markup that uses a component. */
 export interface ImportSpec {

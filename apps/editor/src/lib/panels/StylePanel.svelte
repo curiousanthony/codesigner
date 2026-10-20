@@ -15,8 +15,7 @@
 		SquareDashed,
 		MousePointerClick,
 		TriangleAlert,
-		Repeat
-	} from '@lucide/svelte';
+		Repeat, CirclePlus } from '@lucide/svelte';
 	import { editor, type EditState, type PaddingSide } from '#lib/state/editor.svelte.js';
 	import { invoke } from '#lib/api.js';
 	import Section from '#lib/ui/Section.svelte';
@@ -398,6 +397,23 @@
 			.filter((t) => t.utility?.startsWith('bg-'))
 			.map((t) => ({ name: t.utility!.slice(3), css: `var(${t.name})` }))
 	);
+
+	// ⊕ Expose property: only inside the component being edited (its canvas or in place).
+	const canExpose = $derived(!!info?.loc && info.loc.file === editor.editedComponentFile);
+	let exposing = $state<string | null>(null);
+	$effect(() => {
+		void info?.id;
+		exposing = null;
+	});
+	function suggestProp(): string {
+		const tag = info?.tag ?? '';
+		return /^h[1-6]$/.test(tag) ? 'title' : /^(a|button|label|span)$/.test(tag) ? 'label' : 'text';
+	}
+	async function submitExpose(event: SubmitEvent) {
+		event.preventDefault();
+		if (!info?.loc || !exposing) return;
+		if (await editor.exposeProp({ ...info.loc, tag: info.tag }, exposing.trim(), 'text')) exposing = null;
+	}
 
 	function setText(text: string) {
 		if (!info?.loc) return;
@@ -786,7 +802,22 @@
 				{#if source?.text !== null && source?.text !== undefined && info.kind === 'element'}
 					<Row label={m.label_content()}>
 						<TextField value={source.text} oncommit={setText} />
+						{#if canExpose}
+							<button type="button" class="flex size-[30px] shrink-0 items-center justify-center rounded-control text-component hover:bg-component-tint"
+								title={m.prop_expose()} aria-label={m.prop_expose()} onclick={() => (exposing = suggestProp())}>
+								<CirclePlus class="size-3.5" />
+							</button>
+						{/if}
 					</Row>
+					{#if exposing !== null}
+						<form class="mx-3 mb-1 flex items-center gap-1.5 rounded-control bg-component-tint p-1.5" onsubmit={submitExpose}>
+							<span class="shrink-0 pl-1 text-[11px] text-component">{m.prop_name()}</span>
+							<!-- svelte-ignore a11y_autofocus -->
+							<input class="h-7 min-w-0 flex-1 rounded-[6px] bg-panel px-2 font-mono text-[11px] outline-none" bind:value={exposing} autofocus
+								onkeydown={(e) => e.key === 'Escape' && (exposing = null)} />
+							<button type="submit" class="h-7 rounded-[6px] bg-component px-2 font-medium text-white disabled:opacity-50" disabled={!/^[a-zA-Z_$][\w$]*$/.test(exposing)}>{m.action_add()}</button>
+						</form>
+					{/if}
 				{/if}
 				<Row label={m.label_font()} overridden={overridden('fontFamily')}>
 					<SelectField options={FONTS.map((f) => ({ value: f, label: f[0].toUpperCase() + f.slice(1) }))} value={fontToken} placeholder={fontShown || '—'} label={m.label_font()}

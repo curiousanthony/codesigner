@@ -85,7 +85,7 @@ Tried on the real SaaS (all undone, worktree clean): hover state and `dark:` edi
 - ✅ Components without `tv()` (most app components): Default / Hover / Pressed, a cell per boolean prop, a row per enum prop, sample values for required props; edits change the component's own markup (`hover:` classes for state cells). Double-click a component in Assets to open it
 - ✅ Edit a component in place: from an instance that needs page data the canvas can't invent (a list of cards…), "Edit component" keeps the page and its real data, makes the component's own layers selectable, dims the rest (click it or `Esc` to go back); edits go to the component file. Tried on the real SaaS's KPI row (undone). Double-click a selected instance does the same
 - ✅ Create a component from the selection (`⌥⌘K`, or the component button in the Style panel): the markup moves to `src/lib/components/<Name>.svelte`, values it reads from the page (script variables, `{#each}` items, snippets) become props, its imports are copied, two-way state is refused; undo deletes the file
-- ⬜ Expose a property (the ⊕ binding): turn a static value inside a component into a prop
+- ✅ Expose a property (⊕ next to Content, inside a component's canvas or in place): the static text becomes `{prop}`, declared in `$props()` with the old text as default (typed when Props are), so existing usages don't change and each instance can override it. The engine also exposes static attributes (`href={href}`)
 
 ## M4 — Version control UX 🚧
 

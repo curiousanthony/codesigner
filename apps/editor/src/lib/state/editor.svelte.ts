@@ -632,6 +632,25 @@ class EditorState {
 		this.scope = ['src/routes/'];
 	}
 
+	/** The component file being edited (its canvas, or in place), if any. */
+	get editedComponentFile(): string | null {
+		return this.editingComponent?.component.file ?? (this.inPlace ? (this.scope[0] ?? null) : null);
+	}
+
+	/** ⊕ Expose property: a static value inside the edited component becomes a prop with that value as default. */
+	async exposeProp(target: SourceLoc & { tag: string }, prop: string, from: 'text' | { attribute: string }): Promise<boolean> {
+		const ok = await this.edit(m.edit_expose({ prop }), [{ type: 'expose-prop', target, prop, from }]);
+		if (!ok) return false;
+		await this.loadComponents();
+		const current = this.editingComponent;
+		if (current) {
+			const component = this.components.find((c) => c.file === current.component.file) ?? current.component;
+			this.editingComponent = { ...current, component, spec: buildCanvasSpec(component) };
+		}
+		this.toast(m.prop_exposed({ prop }), 'success');
+		return true;
+	}
+
 	/** Adds a value to a variant axis (copying the default's classes) and shows it on the component canvas. */
 	async addVariant(axis: string, value: string) {
 		const current = this.editingComponent;

@@ -27,6 +27,7 @@ import { EditError, duplicate, insert, insertionChildren, move, remove, renameTa
 import { TailwindEngine } from './tailwind.js';
 import { addVariantValue, editVariantClasses } from './svelte/variants.js';
 import { addColorToken, applyTokenEdit, parseTokens } from './tokens.js';
+import { exposeProp } from './svelte/props.js';
 import { scanComponents } from './components.js';
 import { detectProject } from './project.js';
 
@@ -205,6 +206,9 @@ export class Workspace {
 				break;
 			case 'text':
 				setText(doc, s, this.locate(doc, op.target).node, op.text);
+				break;
+			case 'expose-prop':
+				exposeProp(doc, s, this.locate(doc, op.target).node, op.prop, op.from);
 				break;
 			case 'attribute': {
 				const warning = setAttribute(doc, s, this.locate(doc, op.target).node, op.name, op.value, op.kind);
