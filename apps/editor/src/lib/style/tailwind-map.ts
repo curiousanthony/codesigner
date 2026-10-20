@@ -63,7 +63,12 @@ export type Family =
 	| 'letterSpacing'
 	| 'textTransform'
 	| 'fontStyle'
-	| 'textDecoration';
+	| 'textDecoration'
+	| 'top'
+	| 'right'
+	| 'bottom'
+	| 'left'
+	| 'inset';
 
 const BG_NON_COLOR = /^bg-(clip|origin|fixed|local|scroll|repeat|no-repeat|cover|contain|auto|center|top|bottom|left|right|linear|radial|conic|gradient|none|blend|size|position)/;
 const TEXT_SIZE = /^text-(xs|sm|base|lg|xl|[2-9]xl|\[\d)/;
@@ -107,7 +112,12 @@ const FAMILIES: Record<Family, (utility: string) => boolean> = {
 	letterSpacing: (u) => u.startsWith('tracking-'),
 	textTransform: (u) => /^(uppercase|lowercase|capitalize|normal-case)$/.test(u),
 	fontStyle: (u) => /^(italic|not-italic)$/.test(u),
-	textDecoration: (u) => /^(underline|overline|line-through|no-underline)$/.test(u)
+	textDecoration: (u) => /^(underline|overline|line-through|no-underline)$/.test(u),
+	top: (u) => /^-?top-/.test(u),
+	right: (u) => /^-?right-/.test(u),
+	bottom: (u) => /^-?bottom-/.test(u),
+	left: (u) => /^-?left-/.test(u),
+	inset: (u) => /^-?inset-(?!shadow|ring)/.test(u)
 };
 
 /** Tailwind v4's default text sizes. */
@@ -305,7 +315,7 @@ export function paddingUtilities(sides: { top: number; right: number; bottom: nu
 	];
 }
 
-type Side = 'top' | 'right' | 'bottom' | 'left';
+export type Side = 'top' | 'right' | 'bottom' | 'left';
 const SIDES_OF: Record<string, Side[]> = {
 	p: ['top', 'right', 'bottom', 'left'],
 	px: ['left', 'right'],
@@ -426,4 +436,38 @@ export function radiusClass(value: number, themeRadii: Record<string, number> = 
 export function opacityClass(value: number): string {
 	const pct = Math.round(value * 100);
 	return pct % 5 === 0 ? `opacity-${pct}` : `opacity-[${value}]`;
+}
+
+/** The sides an offset is written for (`right-4`, `inset-x-0` → left and right), and whether an `inset-*` shorthand writes some. */
+export function pinnedSides(utilities: string[]): { pinned: Set<Side>; shorthand: boolean } {
+	const pinned = new Set<Side>();
+	let shorthand = false;
+	for (const u of utilities) {
+		const m = /^-?(top|right|bottom|left|inset(?:-[xy])?)-(?!shadow|ring)/.exec(u);
+		if (!m) continue;
+		const sides: Side[] = m[1] === 'inset' ? ['top', 'right', 'bottom', 'left'] : m[1] === 'inset-x' ? ['left', 'right'] : m[1] === 'inset-y' ? ['top', 'bottom'] : [m[1] as Side];
+		sides.forEach((side) => pinned.add(side));
+		shorthand ||= m[1].startsWith('inset');
+	}
+	return { pinned, shorthand };
+}
+
+/**
+ * Offsets of a positioned layer moved by (dx, dy), the way Framer pins work:
+ * a side written in the classes (`right-4`, or an `inset-*` shorthand) follows
+ * the move, and an axis with no side written gets `left` / `top`. Returns the
+ * utility for each side to write (from `inset`, the resolved px offsets), and
+ * whether `inset-*` shorthands must go (they're written out side by side).
+ */
+export function moveOffsets(utilities: string[], inset: Record<Side, number>, dx: number, dy: number): { sides: Partial<Record<Side, string>>; dropInset: boolean } {
+	const { pinned, shorthand: dropInset } = pinnedSides(utilities);
+	if (!pinned.has('left') && !pinned.has('right')) pinned.add('left');
+	if (!pinned.has('top') && !pinned.has('bottom')) pinned.add('top');
+	const delta: Record<Side, number> = { top: dy, right: -dx, bottom: -dy, left: dx };
+	const sides: Partial<Record<Side, string>> = {};
+	for (const side of pinned) {
+		// Written out when the shorthand goes, else only the sides the move changes.
+		if (delta[side] !== 0 || dropInset) sides[side] = spacing(side, Math.round(inset[side] + delta[side]));
+	}
+	return { sides, dropInset };
 }

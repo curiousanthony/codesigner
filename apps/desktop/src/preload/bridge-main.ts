@@ -301,6 +301,7 @@ export function bridgeMain(config: BridgeConfig) {
 		return {
 			display: cs.display,
 			position: cs.position,
+			inset: { top: cs.top, right: cs.right, bottom: cs.bottom, left: cs.left },
 			flexDirection: cs.flexDirection,
 			flexWrap: cs.flexWrap,
 			justifyContent: cs.justifyContent,
@@ -626,6 +627,27 @@ export function bridgeMain(config: BridgeConfig) {
 		getSelection()?.addRange(range);
 	};
 
+	// ------------------------------------------------------- smart guides
+	/** The containing block of an absolute layer and the other visible layers in it (guest px), for snapping while it moves. */
+	const snapTargets = (id: NodeId): { parent: Rect | null; siblings: Rect[] } => {
+		const rec = recFor(id);
+		const el = rec?.els[0] as HTMLElement | undefined;
+		if (!el) return { parent: null, siblings: [] };
+		const container = (getComputedStyle(el).position === 'fixed' ? null : el.offsetParent) ?? document.documentElement;
+		const parent = container === document.documentElement ? { x: 0, y: 0, width: innerWidth, height: innerHeight } : unionRect([container]);
+		const siblings: Rect[] = [];
+		for (const other of recs.values()) {
+			if (other === rec || other.els.some((e) => e.contains(el) || el.contains(e))) continue;
+			const first = other.els[0] as HTMLElement | undefined;
+			if (!first || !container.contains(first) || !visible(first)) continue;
+			// Layers right inside the container, or positioned like the moving one: what a designer lines things up with.
+			if (first.parentElement !== container && first.offsetParent !== container) continue;
+			const r = unionRect(other.els);
+			if (r && r.width > 0 && r.height > 0) siblings.push(r);
+		}
+		return { parent, siblings: siblings.slice(0, 200) };
+	};
+
 	// ------------------------------------------------------- drop target
 	/** Elements that can't take a drawn child (void, text-level and interactive tags). */
 	const LEAF = /^(img|input|br|hr|svg|path|p|span|h[1-6]|a|button|label|textarea|select|option|video|audio|canvas|iframe|strong|em|b|i|small|code|pre|li)$/;
@@ -846,6 +868,9 @@ export function bridgeMain(config: BridgeConfig) {
 				break;
 			case 'hit':
 				send({ type: 'hit-result', reqId: msg.reqId, path: pathAt(msg.x, msg.y) });
+				break;
+			case 'snap-targets':
+				send({ type: 'snap-result', reqId: msg.reqId, ...snapTargets(msg.id) });
 				break;
 			case 'drop-target':
 				send({ type: 'drop-result', reqId: msg.reqId, target: dropTarget(msg.x, msg.y, msg.exclude) });

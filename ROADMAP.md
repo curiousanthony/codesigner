@@ -68,7 +68,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Resize on the canvas: drag the selection's edges or corners for a fixed size (4px steps, ⌥ 1px, ⇧ on a corner keeps proportions, live preview, one write on release); double-click a handle to fit the content on that axis
 - ✅ Effects section: Shadow (2XS…2XL), Blur and Background blur presets on Tailwind's scales; rings aren't mistaken for shadows; None writes `-none` only when the look comes from a component's base classes
 - ✅ Arrow keys reorder the selection in its stack (`{#each}` items count once); the moved layer stays selected
-- ⬜ Smart guides when moving absolutely positioned layers
+- ✅ Absolute layers: drag to move with smart guides (edges and centers of the container and the layers in it), arrow nudges (⇧ ×10), T/R/B/L offset fields; pinned sides (`right-*`, `inset-*`) follow
 - ✅ Interact mode (use the app normally, `⌘E`) vs Design mode toggle
 - ✅ Optimistic preview CSS during scrubs (one file write on release)
 

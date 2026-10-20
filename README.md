@@ -12,6 +12,7 @@ Designing in a separate prototype tool means re-implementing every design in cod
 
 - **Your app on the canvas:** Desktop, Tablet and Phone frames, each a real browser view sharing one login session. Log in once and every frame and every branch stays logged in, even behind auth (Supabase, Lucia, Auth.js…).
 - **Framer-style selection:** click picks the innermost layer (its parents get a faint outline), ⌘-click picks the container, Esc selects the parent, double-click edits text or opens a component. Component instances (e.g. `<Button>`) are selected as instances; repeated `{#each}` items show ×N.
+- **Absolute layers:** drag them anywhere with smart guides snapping to the container and the layers around; arrow keys nudge (⇧ by 10). A layer pinned right or bottom stays pinned.
 - **Rich text:** double-click a text layer to type over it; ⌘B / ⌘I / ⌘U format the selected words and ⌘K links them. A paragraph with bold words is picked as one text layer.
 - **Layers, Pages, Assets:** all routes (route groups and `[slug]` routes with sample values), the layer tree of the current page, your `src/lib` components with their `tv()` variants, and your design tokens from `app.css`, editable for light and dark.
 - **Style panel:** Position, Size (Fixed / Fill / Fit / Relative / Viewport), Layout (Stack / Grid, direction, distribute, align, wrap, gap, padding), Styles (opacity, visibility, fill, overflow, radius, border), Text, and component props.

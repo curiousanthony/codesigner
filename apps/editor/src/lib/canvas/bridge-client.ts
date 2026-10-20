@@ -5,6 +5,7 @@ import {
 	type GuestToHost,
 	type HostToGuest,
 	type NodeId,
+	type Rect,
 	type SourceLoc
 } from '@codesigner/protocol';
 
@@ -101,6 +102,11 @@ export class BridgeClient {
 	async dropTarget(x: number, y: number, exclude?: NodeId): Promise<DropTarget | null> {
 		const reply = await this.request<Extract<GuestToHost, { type: 'drop-result' }>>({ type: 'drop-target', x, y, exclude }, 800);
 		return reply?.target ?? null;
+	}
+
+	async snapTargets(id: NodeId): Promise<{ parent: Rect | null; siblings: Rect[] }> {
+		const reply = await this.request<Extract<GuestToHost, { type: 'snap-result' }>>({ type: 'snap-targets', id }, 800);
+		return { parent: reply?.parent ?? null, siblings: reply?.siblings ?? [] };
 	}
 
 	async describe(ids: NodeId[]): Promise<ElementInfo[]> {

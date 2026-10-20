@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { activePrefix, castsShadow, coveredPaddingUtilities, familyTokens, paddingSides, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
+import { activePrefix, moveOffsets, castsShadow, coveredPaddingUtilities, familyTokens, paddingSides, paddingUtilities, parseToken, responsiveSet, screenBetween, setFamily, sizeMode, spacing } from './tailwind-map';
 
 describe('tailwind map', () => {
 	test('parses variant prefixes', () => {
@@ -109,5 +109,22 @@ describe('castsShadow', () => {
 	});
 	test('an offset or blurred layer is', () => {
 		expect(castsShadow('rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.1) 0px 1px 2px -1px')).toBe(true);
+	});
+});
+
+describe('moveOffsets', () => {
+	const inset = { top: 24, right: 16, bottom: 300, left: 500 };
+	test('an unpinned layer gets left and top', () => {
+		expect(moveOffsets([], inset, 10, -8)).toEqual({ sides: { left: 'left-127.5', top: 'top-4' }, dropInset: false });
+	});
+	test('a right-pinned layer keeps its pin; an unchanged axis is left alone', () => {
+		expect(moveOffsets(['right-4', 'top-6'], inset, 8, 0)).toEqual({ sides: { right: 'right-2' }, dropInset: false });
+	});
+	test('inset shorthands are written out', () => {
+		expect(moveOffsets(['inset-x-0', 'top-0'], { top: 0, right: 0, bottom: 0, left: 0 }, 0, 12).sides).toEqual({ left: 'left-0', right: 'right-0', top: 'top-3' });
+		expect(moveOffsets(['inset-shadow-sm'], inset, 4, 0)).toEqual({ sides: { left: 'left-126' }, dropInset: false });
+	});
+	test('negative offsets', () => {
+		expect(moveOffsets(['-top-2', 'left-0'], { top: -8, right: 0, bottom: 0, left: 0 }, -8, -8).sides).toEqual({ top: '-top-4', left: '-left-2' });
 	});
 });

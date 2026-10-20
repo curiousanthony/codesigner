@@ -124,6 +124,20 @@
 		}
 	}
 
+	/** Arrow nudges show at once and are written as one edit when the keys rest. */
+	let nudged = { dx: 0, dy: 0 };
+	let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+	function nudge(dx: number, dy: number) {
+		nudged = { dx: nudged.dx + dx, dy: nudged.dy + dy };
+		editor.styleCommands?.offset(nudged.dx, nudged.dy, false);
+		if (nudgeTimer) clearTimeout(nudgeTimer);
+		nudgeTimer = setTimeout(() => {
+			const { dx, dy } = nudged;
+			nudged = { dx: 0, dy: 0 };
+			editor.styleCommands?.offset(dx, dy, true);
+		}, 400);
+	}
+
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Alt') editor.altHeld = true;
 		const mod = event.metaKey || event.ctrlKey;
@@ -189,8 +203,13 @@
 			case 'ArrowLeft':
 			case 'ArrowDown':
 			case 'ArrowRight':
-				// Arrow keys reorder the selection in its stack, like Framer.
 				if (!editor.selection.ids.length) return;
+				// An absolute layer nudges (⇧ by 10), like Framer; the others reorder in their stack.
+				if (editor.selection.ids.length === 1 && /^(absolute|fixed)$/.test(editor.selected?.computed?.position ?? '') && editor.styleCommands) {
+					const step = event.shiftKey ? 10 : 1;
+					nudge(event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0, event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0);
+					break;
+				}
 				void reorderSelection(event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1);
 				break;
 			case 'e':

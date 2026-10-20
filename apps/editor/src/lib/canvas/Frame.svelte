@@ -8,6 +8,7 @@
 	import { BridgeClient } from './bridge-client';
 	import { breakpointLabel } from './breakpoints';
 	import { measure } from './measure';
+	import { snapMove, type Guide } from './snap';
 	import { m } from '#lib/paraglide/messages.js';
 
 	type Props = {
@@ -279,7 +280,10 @@
 
 	// ---------------------------------------------------- drag to reorder
 	/** Armed on pointerdown inside the selected layer; becomes a drag after a few pixels. */
-	let dragArm: { id: NodeId; start: { x: number; y: number }; rect: Rect } | null = null;
+	let dragArm: { id: NodeId; start: { x: number; y: number }; rect: Rect; free: boolean } | null = null;
+	/** An absolute layer moved freely: its offset so far (guest px) and Framer's smart guides. */
+	let moving = $state<{ dx: number; dy: number; guides: Guide[] } | null>(null);
+	let snapTo: Rect[] = [];
 	let dragging = $state<{ id: NodeId; rect: Rect; dx: number; dy: number } | null>(null);
 	let dragTarget = $state<DropTarget | null>(null);
 
@@ -290,13 +294,44 @@
 		const rect = selectedRects[info.id];
 		const p = toGuest(event);
 		if (!rect || p.x < rect.x || p.y < rect.y || p.x > rect.x + rect.width || p.y > rect.y + rect.height) return false;
-		dragArm = { id: info.id, start: p, rect };
+		// Absolute and fixed layers move freely (offsets), the others reorder in their stack.
+		const free = /^(absolute|fixed)$/.test(info.computed?.position ?? '') && !!editor.styleCommands;
+		dragArm = { id: info.id, start: p, rect, free };
+		snapTo = [];
+		if (free) void client?.snapTargets(info.id).then((t) => (snapTo = [...(t.parent ? [t.parent] : []), ...t.siblings]));
 		gesture.setPointerCapture(event.pointerId);
 		return true;
 	}
 
+	function freeMove(event: PointerEvent) {
+		if (!dragArm) return;
+		const p = toGuest(event);
+		let dx = p.x - dragArm.start.x;
+		let dy = p.y - dragArm.start.y;
+		if (!moving && Math.hypot(dx, dy) * scale < 4) return;
+		// ⇧ keeps to the axis moved most.
+		if (event.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
+		const snapped = snapMove(dragArm.rect, Math.round(dx), Math.round(dy), snapTo, 5 / scale);
+		if (event.shiftKey) (dx === 0 && (snapped.dx = 0), dy === 0 && (snapped.dy = 0));
+		moving = { dx: Math.round(snapped.dx), dy: Math.round(snapped.dy), guides: snapped.guides };
+		editor.setHover(frameId, null);
+		editor.styleCommands?.offset(moving.dx, moving.dy, false);
+	}
+
+	function freeEnd() {
+		const moved = moving;
+		moving = null;
+		dragArm = null;
+		if (!moved) return;
+		suppressClick = true;
+		setTimeout(() => (suppressClick = false), 0);
+		if (moved.dx === 0 && moved.dy === 0) return editor.clearPreview();
+		editor.styleCommands?.offset(moved.dx, moved.dy, true);
+	}
+
 	let dragSeq = 0;
 	async function dragMove(event: PointerEvent) {
+		if (dragArm?.free) return freeMove(event);
 		if (!dragArm || !client) return;
 		const p = toGuest(event);
 		const dx = p.x - dragArm.start.x;
@@ -310,6 +345,7 @@
 	}
 
 	async function dragEnd(event: PointerEvent) {
+		if (dragArm?.free) return freeEnd();
 		const wasDragging = !!dragging;
 		const arm = dragArm;
 		dragArm = null;
@@ -957,6 +993,15 @@
 					{/if}
 				{/if}
 				<div class="absolute opacity-80" style="left:{g.x + dragging.dx}px; top:{g.y + dragging.dy}px; width:{g.width}px; height:{g.height}px; box-shadow: inset 0 0 0 calc(1.5px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);"></div>
+			{/if}
+			{#if moving}
+				<!-- Smart guides, in Framer's measurement red. -->
+				{#each moving.guides as guide, i (i)}
+					<div class="absolute bg-[#f43f5e]"
+						style={guide.axis === 'x'
+							? `left:${guide.at}px; top:${guide.from}px; width:calc(1px * var(--inv)); height:${guide.to - guide.from}px;`
+							: `left:${guide.from}px; top:${guide.at}px; width:${guide.to - guide.from}px; height:calc(1px * var(--inv));`}></div>
+				{/each}
 			{/if}
 			{#if drawBox && (drawBox.width > 2 || drawBox.height > 2)}
 				<div class="absolute" style="left:{drawBox.x}px; top:{drawBox.y}px; width:{drawBox.width}px; height:{drawBox.height}px; box-shadow: inset 0 0 0 calc(1px * var(--inv)) var(--cd-accent); background: var(--cd-accent-tint);">

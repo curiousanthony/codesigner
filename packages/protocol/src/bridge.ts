@@ -41,6 +41,8 @@ export interface Spacing {
 export interface ComputedSnapshot {
 	display: string;
 	position: string;
+	/** Resolved offsets (px) of a positioned element. */
+	inset: { top: string; right: string; bottom: string; left: string };
 	flexDirection: string;
 	flexWrap: string;
 	justifyContent: string;
@@ -167,6 +169,8 @@ export type HostToGuest =
 	| { type: 'hit'; reqId: number; x: number; y: number }
 	/** `exclude`: a layer being dragged (not a target, not a sibling to place around; containers must be in its file). */
 	| { type: 'drop-target'; reqId: number; x: number; y: number; exclude?: NodeId }
+	/** Edges an absolute layer being moved can snap to: its containing block and the other layers in it. */
+	| { type: 'snap-targets'; reqId: number; id: NodeId }
 	| { type: 'describe'; reqId: number; ids: NodeId[] }
 	| { type: 'find-loc'; reqId: number; loc: SourceLoc }
 	| { type: 'highlight'; hover: NodeId | null; selected: NodeId[]; /** Parents of the selection, outlined faintly. */ parents?: NodeId[] }
@@ -196,6 +200,7 @@ export type GuestToHost =
 	/** Layer ids from the root to the deepest layer under the point. */
 	| { type: 'hit-result'; reqId: number; path: NodeId[] }
 	| { type: 'drop-result'; reqId: number; target: DropTarget | null }
+	| { type: 'snap-result'; reqId: number; parent: Rect | null; siblings: Rect[] }
 	| { type: 'described'; reqId: number; elements: ElementInfo[] }
 	| { type: 'found-loc'; reqId: number; ids: NodeId[] }
 	| { type: 'tree'; root: LayerNode | null }

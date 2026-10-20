@@ -33,6 +33,9 @@
 		arbitraryPx,
 		distributeValue,
 		familyTokens,
+		moveOffsets,
+		pinnedSides,
+		type Side,
 		mergeEdits,
 		opacityClass,
 		parseToken,
@@ -260,6 +263,29 @@
 		return set('padding', coveredPaddingUtilities({ ...padding, [side]: value }, covered));
 	}
 
+	// ---------------------------------------------------------- offsets
+	const OFFSET_FAMILIES = ['top', 'right', 'bottom', 'left', 'inset'] as const;
+	const offsetUtilities = () => OFFSET_FAMILIES.flatMap((f) => familyTokens(cls, f, prefixFor(f)).map((t) => parseToken(t).utility));
+	const resolvedInset = $derived(c ? { top: px(c.inset.top), right: px(c.inset.right), bottom: px(c.inset.bottom), left: px(c.inset.left) } : { top: 0, right: 0, bottom: 0, left: 0 });
+	/** Sides written in the classes (`right-4`, `inset-x-0`…): the ones the fields show; the others are auto. */
+	const pinned = $derived(c ? pinnedSides(offsetUtilities()).pinned : new Set<Side>());
+
+	function offsetsEdit(sides: Partial<Record<Side, string>>, dropInset: boolean): ClassEdit {
+		return mergeEdits(...Object.entries(sides).map(([side, utility]) => set(side as Side, [utility])), ...(dropInset ? [set('inset', [])] : []));
+	}
+
+	/** Moves the layer: its pinned sides follow (Framer's pins). */
+	function offsetEdit(dx: number, dy: number): ClassEdit {
+		const { sides, dropInset } = moveOffsets(offsetUtilities(), resolvedInset, dx, dy);
+		return offsetsEdit(sides, dropInset);
+	}
+
+	/** One side typed in: an `inset-*` shorthand is written out first. */
+	function sideEdit(side: Side, value: number): ClassEdit {
+		const { sides, dropInset } = moveOffsets(offsetUtilities(), resolvedInset, 0, 0);
+		return offsetsEdit({ ...(dropInset ? sides : {}), [side]: spacing(side, value) }, dropInset);
+	}
+
 	function setPadding(side: PaddingSide, value: number, coalesce: boolean) {
 		void apply(m.edit_padding(), paddingEdit(side, value), coalesce);
 	}
@@ -276,7 +302,8 @@
 			},
 			fit: (axis) => void apply(axis === 'width' ? m.edit_width() : m.edit_height(), sizeEdit(axis, 'fit', 0)),
 			typography: (kind, value) =>
-				void (kind === 'font' ? apply(m.edit_font(), set('fontFamily', [`font-${value}`])) : apply(m.edit_font_size(), set('fontSize', [`text-${value}`])))
+				void (kind === 'font' ? apply(m.edit_font(), set('fontFamily', [`font-${value}`])) : apply(m.edit_font_size(), set('fontSize', [`text-${value}`]))),
+			offset: (dx, dy, commit) => (commit ? void apply(m.edit_move(), offsetEdit(dx, dy)) : preview(offsetEdit(dx, dy)))
 		};
 		editor.styleCommands = commands;
 		// A panel replaced by a newer one (hot reload, remount) must not unregister the newer one's commands.
@@ -632,6 +659,17 @@
 			<Row label={m.label_type()} overridden={overridden('position')}>
 				<SelectField options={POSITIONS} value={c.position} onchange={(v) => apply(m.edit_position(), set('position', v === 'static' ? [] : [v]))} />
 			</Row>
+			{#if c.position !== 'static'}
+				<Row label={m.label_offsets()} overridden={overridden('top', 'right', 'bottom', 'left', 'inset')}>
+					<div class="grid w-full grid-cols-2 gap-1">
+						{#each ['top', 'right', 'bottom', 'left'] as const as side (side)}
+							<NumberField value={pinned.has(side) ? Math.round(resolvedInset[side]) : null} placeholder={m.size_auto()} suffix={side[0].toUpperCase()} label={side}
+								onpreview={(v) => preview(sideEdit(side, v))}
+								oncommit={(v, co) => apply(m.edit_position(), sideEdit(side, v), co)} />
+						{/each}
+					</div>
+				</Row>
+			{/if}
 		</Section>
 
 		<!-- Size -->

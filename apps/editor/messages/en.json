@@ -255,6 +255,7 @@
 	"label_max_w": "Max W",
 	"label_min_max": "Min / Max W",
 	"label_min_w": "Min W",
+	"label_offsets": "Offsets",
 	"label_opacity": "Opacity",
 	"label_overflow": "Overflow",
 	"label_padding": "Padding",

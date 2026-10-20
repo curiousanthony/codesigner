@@ -165,6 +165,8 @@ class EditorState {
 		fit: (axis: 'width' | 'height') => void;
 		/** Assets → Typography: a font (`serif`) or a text size (`2xl`) on the selection. */
 		typography: (kind: 'font' | 'size', value: string) => void;
+		/** Moving an absolute layer (canvas drag, arrow keys) by guest px; its pinned sides follow. */
+		offset: (dx: number, dy: number, commit: boolean) => void;
 	} | null>(null);
 	/** Called with the files (relative to the working copy) that changed, whoever changed them. */
 	readonly sourceListeners = new Set<(files: string[]) => void>();
