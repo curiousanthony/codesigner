@@ -343,6 +343,9 @@ export function bridgeMain(config: BridgeConfig) {
 			fontWeight: cs.fontWeight,
 			lineHeight: cs.lineHeight,
 			letterSpacing: cs.letterSpacing,
+			textTransform: cs.textTransform,
+			fontStyle: cs.fontStyle,
+			textDecorationLine: cs.textDecorationLine,
 			textAlign: cs.textAlign,
 			parentDisplay: parent?.display ?? 'block',
 			parentFlexDirection: parent?.flexDirection ?? 'row'

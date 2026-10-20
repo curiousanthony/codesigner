@@ -45,6 +45,8 @@
 		SHADOWS,
 		BLURS,
 		castsShadow,
+		LEADINGS,
+		TRACKINGS,
 		sizeClasses,
 		sizeMode,
 		spacing,
@@ -271,7 +273,9 @@
 				if (commit) void apply(width !== null && height !== null ? m.edit_size() : width !== null ? m.edit_width() : m.edit_height(), edit);
 				else preview(edit);
 			},
-			fit: (axis) => void apply(axis === 'width' ? m.edit_width() : m.edit_height(), sizeEdit(axis, 'fit', 0))
+			fit: (axis) => void apply(axis === 'width' ? m.edit_width() : m.edit_height(), sizeEdit(axis, 'fit', 0)),
+			typography: (kind, value) =>
+				void (kind === 'font' ? apply(m.edit_font(), set('fontFamily', [`font-${value}`])) : apply(m.edit_font_size(), set('fontSize', [`text-${value}`])))
 		};
 		editor.styleCommands = commands;
 		// A panel replaced by a newer one (hot reload, remount) must not unregister the newer one's commands.
@@ -354,6 +358,40 @@
 	const weightName = $derived(WEIGHTS.find(([, w]) => w === String(Math.round(px(c?.fontWeight) / 100) * 100))?.[0] ?? 'normal');
 	const sizeToken = $derived(tokenIn('fontSize', prefixFor('fontSize'), 'text-'));
 	const textAlign = $derived((c?.textAlign ?? 'start').replace('start', 'left').replace('end', 'right'));
+	/** The theme's fonts (`--font-*` in @theme) plus Tailwind's defaults. */
+	const FONTS = $derived([
+		...new Set([...(editor.tokens?.tokens ?? []).filter((t) => t.utility?.startsWith('font-') && t.type === 'font').map((t) => t.utility!.slice(5)), 'sans', 'serif', 'mono'])
+	]);
+	const fontToken = $derived(tokenIn('fontFamily', prefixFor('fontFamily'), 'font-'));
+	const fontShown = $derived.by(() => {
+		const first = (c?.fontFamily ?? '').split(',')[0].replace(/["']/g, '').trim();
+		return /^(-apple-system|system-ui|ui-sans-serif|BlinkMacSystemFont)$/.test(first) ? m.text_font_system() : first;
+	});
+	const leadingToken = $derived(tokenIn('lineHeight', prefixFor('lineHeight'), 'leading-'));
+	const lineHeightPx = $derived(c && c.lineHeight !== 'normal' ? Math.round(px(c.lineHeight)) : null);
+	const trackingToken = $derived(tokenIn('letterSpacing', prefixFor('letterSpacing'), 'tracking-'));
+	const trackingShown = $derived.by(() => {
+		if (!c || c.letterSpacing === 'normal') return 'normal';
+		const em = px(c.letterSpacing) / Math.max(1, px(c.fontSize));
+		return TRACKINGS.reduce((best, t) => (Math.abs(t[1] - em) < Math.abs(best[1] - em) ? t : best))[0];
+	});
+	const CASES = $derived([
+		{ value: 'none', label: m.text_case_none() },
+		{ value: 'uppercase', label: m.text_case_upper() },
+		{ value: 'lowercase', label: m.text_case_lower() },
+		{ value: 'capitalize', label: m.text_case_capitalize() }
+	]);
+	const DECORATIONS = $derived([
+		{ value: 'none', label: m.text_case_none() },
+		{ value: 'underline', label: m.text_decoration_underline() },
+		{ value: 'line-through', label: m.text_decoration_strike() }
+	]);
+	/** A toggle-like family: `none` drops the class, or writes the reset when the look is inherited. */
+	function textEdit(family: Family, value: string, current: string, reset: string): ClassEdit {
+		if (value !== 'none') return set(family, [value]);
+		const own = familyTokens(cls, family, prefixFor(family)).length > 0;
+		return set(family, own || current === 'none' || current === 'normal' ? [] : [reset]);
+	}
 
 	const textColorOptions = $derived.by((): ColorOption[] =>
 		(editor.tokens?.tokens ?? [])
@@ -750,15 +788,39 @@
 						<TextField value={source.text} oncommit={setText} />
 					</Row>
 				{/if}
+				<Row label={m.label_font()} overridden={overridden('fontFamily')}>
+					<SelectField options={FONTS.map((f) => ({ value: f, label: f[0].toUpperCase() + f.slice(1) }))} value={fontToken} placeholder={fontShown || '—'} label={m.label_font()}
+						onchange={(f) => apply(m.edit_font(), set('fontFamily', [`font-${f}`]))} />
+				</Row>
 				<Row label={m.label_font_size()} overridden={overridden('fontSize')}>
 					<NumberField value={Math.round(px(c.fontSize))} min={1}
 						oncommit={(v, co) => apply(m.edit_font_size(), set('fontSize', [arbitraryPx('text', v)]), co)} />
 					<SelectField compact options={FONT_SIZES.map((s) => ({ value: s, label: s }))} value={sizeToken} placeholder="—"
 						onchange={(s) => apply(m.edit_font_size(), set('fontSize', [`text-${s}`]))} />
 				</Row>
-				<Row label={m.label_weight()} overridden={overridden('fontWeight')}>
+				<Row label={m.label_weight()} overridden={overridden('fontWeight', 'fontStyle')}>
 					<SelectField options={WEIGHTS.map(([name, w]) => ({ value: name, label: `${name[0].toUpperCase()}${name.slice(1)} · ${w}` }))} value={weightName}
 						onchange={(w) => apply(m.edit_weight(), set('fontWeight', [`font-${w}`]))} />
+					<button type="button" class="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-control italic {c.fontStyle === 'italic' ? 'bg-accent-tint text-accent' : 'bg-control text-label hover:bg-control-hover'}"
+						title={m.label_italic()} aria-label={m.label_italic()} aria-pressed={c.fontStyle === 'italic'}
+						onclick={() => apply(m.edit_text_style(), textEdit('fontStyle', c.fontStyle === 'italic' ? 'none' : 'italic', c.fontStyle, 'not-italic'))}>I</button>
+				</Row>
+				<Row label={m.label_line_height()} overridden={overridden('lineHeight')}>
+					<NumberField value={lineHeightPx} min={0} placeholder={m.text_auto()} label={m.label_line_height()}
+						onpreview={(v) => preview(set('lineHeight', [arbitraryPx('leading', v)]))}
+						oncommit={(v, co) => apply(m.edit_line_height(), set('lineHeight', [arbitraryPx('leading', v)]), co)} />
+					<SelectField compact options={LEADINGS.map(([name, ratio]) => ({ value: name, label: `${name} · ${ratio}` }))} value={leadingToken} placeholder="—" label={m.label_line_height()}
+						onchange={(l) => apply(m.edit_line_height(), set('lineHeight', [`leading-${l}`]))} />
+				</Row>
+				<Row label={m.label_letter_spacing()} overridden={overridden('letterSpacing')}>
+					<SelectField options={TRACKINGS.map(([name, em]) => ({ value: name, label: `${name[0].toUpperCase()}${name.slice(1)} · ${em}em` }))} value={trackingToken ?? trackingShown}
+						onchange={(t) => apply(m.edit_letter_spacing(), set('letterSpacing', t === 'normal' && !trackingToken ? [] : [`tracking-${t}`]))} />
+				</Row>
+				<Row label={m.label_text_style()} overridden={overridden('textTransform', 'textDecoration')}>
+					<SelectField compact options={CASES} value={c.textTransform === 'none' ? 'none' : c.textTransform} label={m.label_text_case()}
+						onchange={(v) => apply(m.edit_text_style(), textEdit('textTransform', v, c.textTransform, 'normal-case'))} />
+					<SelectField compact options={DECORATIONS} value={c.textDecorationLine.includes('line-through') ? 'line-through' : c.textDecorationLine.includes('underline') ? 'underline' : 'none'} label={m.label_text_decoration()}
+						onchange={(v) => apply(m.edit_text_style(), textEdit('textDecoration', v, c.textDecorationLine, 'no-underline'))} />
 				</Row>
 				<Row label={m.label_color()} overridden={overridden('textColor')}>
 					<ColorField value={c.color} token={tokenIn('textColor', prefixFor('textColor'), 'text-')} options={textColorOptions} label={m.label_color()}

@@ -57,11 +57,18 @@ export type Family =
 	| 'textAlign'
 	| 'shadow'
 	| 'blur'
-	| 'backdropBlur';
+	| 'backdropBlur'
+	| 'fontFamily'
+	| 'lineHeight'
+	| 'letterSpacing'
+	| 'textTransform'
+	| 'fontStyle'
+	| 'textDecoration';
 
 const BG_NON_COLOR = /^bg-(clip|origin|fixed|local|scroll|repeat|no-repeat|cover|contain|auto|center|top|bottom|left|right|linear|radial|conic|gradient|none|blend|size|position)/;
 const TEXT_SIZE = /^text-(xs|sm|base|lg|xl|[2-9]xl|\[\d)/;
 const TEXT_ALIGN = /^text-(left|center|right|justify|start|end)$/;
+const FONT_WEIGHT = /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[\d)/;
 const BORDER_WIDTH = /^border(-[xytrblse])?(-(\d+|\[[^\]]+\]))?$/;
 
 const FAMILIES: Record<Family, (utility: string) => boolean> = {
@@ -87,14 +94,55 @@ const FAMILIES: Record<Family, (utility: string) => boolean> = {
 	borderColor: (u) => u.startsWith('border-') && !BORDER_WIDTH.test(u) && !/^border-(solid|dashed|dotted|double|none|hidden|collapse|separate)$/.test(u),
 	gridCols: (u) => u.startsWith('grid-cols-'),
 	fontSize: (u) => TEXT_SIZE.test(u),
-	fontWeight: (u) => /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[\d)/.test(u),
+	fontWeight: (u) => FONT_WEIGHT.test(u),
 	textColor: (u) => u.startsWith('text-') && !TEXT_SIZE.test(u) && !TEXT_ALIGN.test(u) && !/^text-(wrap|nowrap|balance|pretty|ellipsis|clip)$/.test(u),
 	textAlign: (u) => TEXT_ALIGN.test(u),
 	// Sizes only: `shadow-black/20` is the shadow's color, a separate family.
 	shadow: (u) => /^shadow(-(2xs|xs|sm|md|lg|xl|2xl|none|\[.+\]))?$/.test(u),
 	blur: (u) => /^blur(-(none|xs|sm|md|lg|xl|2xl|3xl|\[.+\]))?$/.test(u),
-	backdropBlur: (u) => /^backdrop-blur(-(none|xs|sm|md|lg|xl|2xl|3xl|\[.+\]))?$/.test(u)
+	backdropBlur: (u) => /^backdrop-blur(-(none|xs|sm|md|lg|xl|2xl|3xl|\[.+\]))?$/.test(u),
+	// font-<theme name>: anything font-* that isn't a weight or another font utility.
+	fontFamily: (u) => u.startsWith('font-') && !FONT_WEIGHT.test(u) && !/^font-(stretch|features|variant)/.test(u),
+	lineHeight: (u) => u.startsWith('leading-'),
+	letterSpacing: (u) => u.startsWith('tracking-'),
+	textTransform: (u) => /^(uppercase|lowercase|capitalize|normal-case)$/.test(u),
+	fontStyle: (u) => /^(italic|not-italic)$/.test(u),
+	textDecoration: (u) => /^(underline|overline|line-through|no-underline)$/.test(u)
 };
+
+/** Tailwind v4's default text sizes. */
+export const TEXT_SIZES = [
+	['xs', '0.75rem'],
+	['sm', '0.875rem'],
+	['base', '1rem'],
+	['lg', '1.125rem'],
+	['xl', '1.25rem'],
+	['2xl', '1.5rem'],
+	['3xl', '1.875rem'],
+	['4xl', '2.25rem'],
+	['5xl', '3rem'],
+	['6xl', '3.75rem'],
+	['7xl', '4.5rem'],
+	['8xl', '6rem'],
+	['9xl', '8rem']
+] as const;
+
+export const LEADINGS = [
+	['none', 1],
+	['tight', 1.25],
+	['snug', 1.375],
+	['normal', 1.5],
+	['relaxed', 1.625],
+	['loose', 2]
+] as const;
+export const TRACKINGS = [
+	['tighter', -0.05],
+	['tight', -0.025],
+	['normal', 0],
+	['wide', 0.025],
+	['wider', 0.05],
+	['widest', 0.1]
+] as const;
 
 /**
  * Whether a computed box-shadow casts a shadow: Tailwind v4 composes rings

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { DesignToken } from '@codesigner/protocol';
 	import { Component, ChevronRight, Search, Palette } from '@lucide/svelte';
+	import { TEXT_SIZES } from '#lib/style/tailwind-map.js';
 	import { editor } from '#lib/state/editor.svelte.js';
 	import { invoke, errorMessage } from '#lib/api.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let query = $state('');
-	let open = $state<Record<string, boolean>>({ components: true, images: true, colors: true });
+	let open = $state<Record<string, boolean>>({ components: true, images: true, typography: true, colors: true });
 	let editing = $state<{ name: string; scope: 'light' | 'dark' } | null>(null);
 	let draft = $state('');
 	let expandedToken = $state<string | null>(null);
@@ -36,6 +37,36 @@
 			(t) => t.type !== 'color' && !t.scopes.every((s) => s.startsWith('@theme')) && (!q || t.name.includes(q))
 		)
 	);
+
+	// Typography: the theme's fonts and text sizes (Tailwind's defaults unless the theme overrides them).
+	const tokenList = $derived(editor.tokens?.tokens ?? []);
+	const fonts = $derived.by(() => {
+		const themed = tokenList.filter((t) => t.type === 'font' && t.utility?.startsWith('font-')).map((t) => ({ name: t.utility!.slice(5), family: resolve(t, false) }));
+		const defaults = [
+			{ name: 'sans', family: 'ui-sans-serif, system-ui, sans-serif' },
+			{ name: 'serif', family: 'ui-serif, Georgia, serif' },
+			{ name: 'mono', family: 'ui-monospace, SFMono-Regular, monospace' }
+		].filter((d) => !themed.some((t) => t.name === d.name));
+		return [...themed, ...defaults].filter((f) => !q || f.name.includes(q));
+	});
+	const sizes = $derived.by(() => {
+		const themed = new Map(tokenList.filter((t) => /^--text-[\w-]+$/.test(t.name) && !t.name.includes('--line-height') && t.value).map((t) => [t.name.slice(7), t.value!]));
+		const names = [...new Set([...TEXT_SIZES.map(([n]) => n), ...themed.keys()])];
+		return names
+			.map((name) => ({ name, value: themed.get(name) ?? TEXT_SIZES.find(([n]) => n === name)?.[1] ?? '' }))
+			.filter((s) => s.value && (!q || s.name.includes(q)));
+	});
+	const toPx = (v: string) => (v.endsWith('rem') ? parseFloat(v) * 16 : parseFloat(v));
+
+	async function applyTypography(kind: 'font' | 'size', value: string) {
+		if (!editor.selection.ids.length) return editor.toast(m.cmd_select_first());
+		// The Style panel owns the class rules (breakpoints, states): make sure it's mounted.
+		if (!editor.styleCommands) {
+			editor.rightTab = 'style';
+			await new Promise((r) => setTimeout(r, 50));
+		}
+		editor.styleCommands?.typography(kind, value);
+	}
 
 	/** Resolves a var() chain to a concrete value for the swatch. */
 	function resolve(token: DesignToken, dark: boolean): string {
@@ -172,6 +203,25 @@
 			{:else}
 				<p class="px-2 py-2 text-muted">{m.assets_no_images()}</p>
 			{/if}
+		{/if}
+
+		{@render header('typography', m.assets_typography(), fonts.length + sizes.length)}
+		{#if open.typography}
+			<p class="px-2 pb-1 text-[10px] text-muted">{m.assets_typography_hint()}</p>
+			{#each fonts as font (font.name)}
+				<button type="button" class="flex h-[34px] w-full items-center gap-2.5 rounded-control px-2 text-left hover:bg-row-hover" title={font.family} onclick={() => applyTypography('font', font.name)}>
+					<span class="w-9 shrink-0 text-center text-[17px] text-fg-strong" style="font-family:{font.family}">Ag</span>
+					<span class="min-w-0 flex-1 truncate">{font.name}</span>
+					<span class="max-w-[90px] truncate text-[10px] text-muted">{font.family.split(',')[0].replace(/["']/g, '')}</span>
+				</button>
+			{/each}
+			{#each sizes as size (size.name)}
+				<button type="button" class="flex min-h-[30px] w-full items-center gap-2.5 rounded-control px-2 text-left hover:bg-row-hover" onclick={() => applyTypography('size', size.name)}>
+					<span class="w-9 shrink-0 text-center leading-none text-fg-strong" style="font-size:{Math.min(22, toPx(size.value))}px">Aa</span>
+					<span class="min-w-0 flex-1 truncate">text-{size.name}</span>
+					<span class="text-[10px] text-muted tabular-nums">{Math.round(toPx(size.value))}px</span>
+				</button>
+			{/each}
 		{/if}
 
 		{@render header('colors', m.assets_colors(), colorTokens.length)}

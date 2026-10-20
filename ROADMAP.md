@@ -52,7 +52,8 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Draw tools like Framer: `S` Stack, `F` Frame, `⇧G` Grid, `T` Text (also in the `+` menu). Click or drag inside a container; an insertion line follows its flow (row, column, grid), `{#each}` runs are kept intact, empty layout space draws into the page. Drawn sizes snap to the 4px scale; drawn frames get a fill that contrasts in light and dark. `⇧A` wraps the selection in a Stack (smoke-tested; tried on the real SaaS)
 - ✅ Insert from Assets: drag a component (its import is added: named, `* as Card` or default) or an image (static/ by URL, `src/lib/assets` imported) onto the canvas
 - ✅ Text editing on canvas: double-click a selected text layer (or draw one with `T`), type, `↩` commits, `Esc` cancels
-- ⬜ Rich text (inline `<strong>`/links), typography presets
+- ✅ Typography: font (theme `--font-*` + sans/serif/mono), line height (px or leading presets), letter spacing, case, decoration, italic
+- ⬜ Rich text (inline `<strong>`/links)
 - ✅ Drag to reorder on the canvas (ghost + insertion line) and in the Layers panel (before / after / inside); delete, duplicate (`⌘D`), copy/paste style (`⌥⌘C` / `⌥⌘V`)
 - ✅ Breakpoint-aware edits with Framer's cascade: an edit applies to that breakpoint and smaller ones, larger frames get pinned (`gap-6` edited on Phone → `gap-3 md:gap-6`); overridden properties highlighted
 - ✅ Per-breakpoint layer trees in the Layers panel (Desktop / Tablet / Phone rows), selection mirrored in every frame, layer click outlines on the canvas
@@ -76,7 +77,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 Tried on the real SaaS (all undone, worktree clean): hover state and `dark:` edits, dragging one of its components from Assets, padding handles on a responsive container (`sm:pr-6 sm:pl-11`), Create component on its hero (5 props, imports moved; `svelte-check` error count unchanged).
 
 - ✅ Assets panel: components (grouped, e.g. `ui/`), color tokens (light/dark), images in `static/` and `src/lib/assets` with thumbnails; all draggable onto the canvas
-- ⬜ Assets: typography tokens
+- ✅ Assets: Typography (theme fonts and text sizes with a live sample; click applies to the selection)
 - ⬜ Design tokens editor: light/dark values from `:root` / `.dark` / `@theme`, alias chains, add a token
 - ⬜ Component instance panel: props from `$props()` and variants from `tv()` (Variant dropdown, Text, Boolean, Icon…)
 - ✅ "Edit component": component canvas with every `tv()` variant × Default / Hover / Pressed (forced through CDP) plus sizes, purple accent, breadcrumb; edits go to the variant's own entry, `hover:`/`active:` for states, `compoundVariants` when a shared axis controls the value; `+ Variant`

@@ -73,6 +73,9 @@ export interface ComputedSnapshot {
 	fontWeight: string;
 	lineHeight: string;
 	letterSpacing: string;
+	textTransform: string;
+	fontStyle: string;
+	textDecorationLine: string;
 	textAlign: string;
 	/** Parent's display, needed to know if the element is a flex/grid child. */
 	parentDisplay: string;
