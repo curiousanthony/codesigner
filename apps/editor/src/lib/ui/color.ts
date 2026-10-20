@@ -53,3 +53,28 @@ export function parseHsva(color: string): Hsva {
 	const rgba = toRgba(color) ?? [0, 0, 0, 1];
 	return { ...rgbToHsv(rgba[0], rgba[1], rgba[2]), a: rgba[3] };
 }
+
+/** RGB (0–255) → HSL (h 0–360, s and l 0–100). */
+export function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+	const [R, G, B] = [r / 255, g / 255, b / 255];
+	const max = Math.max(R, G, B);
+	const min = Math.min(R, G, B);
+	const l = (max + min) / 2;
+	const d = max - min;
+	if (d === 0) return [0, 0, Math.round(l * 100)];
+	const s = d / (1 - Math.abs(2 * l - 1));
+	const h = max === R ? ((G - B) / d) % 6 : max === G ? (B - R) / d + 2 : (R - G) / d + 4;
+	return [Math.round((h * 60 + 360) % 360), Math.round(s * 100), Math.round(l * 100)];
+}
+
+/** HSL (h 0–360, s and l 0–100) → RGB (0–255). */
+export function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+	const S = s / 100;
+	const L = l / 100;
+	const c = (1 - Math.abs(2 * L - 1)) * S;
+	const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+	const m = L - c / 2;
+	const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+	return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+

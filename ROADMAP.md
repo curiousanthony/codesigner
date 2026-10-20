@@ -62,7 +62,7 @@ Goal: open a project, see it logged in on the canvas, select things, change layo
 - ✅ Dark preview in the dock; color edits under it write `dark:` variants (projects with a class-based dark mode)
 - ✅ States on page elements: Default / Hover / Pressed / Focus picker in the Style panel forces the state on the selection in every breakpoint (CDP) and edits write `hover:` / `active:` / `focus-visible:`
 - ✅ Color picker: token swatches with search and an opacity modifier (`bg-primary/80`), custom colors with saturation/brightness, hue and alpha (one write on release), hex input; opens upwards near the bottom
-- ⬜ Color picker: rgb/hsl/oklch input modes, eyedropper
+- ✅ Color picker: Hex / RGB / HSL inputs, eyedropper (picks anywhere on screen, the canvas included)
 - ✅ Scrub-to-change numeric inputs (drag the field), arrow keys ±1 / ⇧ ±10 / ⌥ ±0.1, math in fields
 - ✅ ⌥ distance measurement (red lines to the hovered layer; four sides when nested) and padding / gap handles on the canvas (drag with live preview, 4px steps, ⌥ 1px, ⇧ all sides; writes `px-8 pt-14 pb-8`-style classes)
 - ✅ Resize on the canvas: drag the selection's edges or corners for a fixed size (4px steps, ⌥ 1px, ⇧ on a corner keeps proportions, live preview, one write on release); double-click a handle to fit the content on that axis

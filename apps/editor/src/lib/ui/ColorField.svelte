@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { ChevronDown, Check } from '@lucide/svelte';
+	import { ChevronDown, Check, Pipette } from '@lucide/svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { hsvToRgb, parseHsva, toHex, toHexLabel, type Hsva } from './color.js';
+	import { hslToRgb, hsvToRgb, parseHsva, rgbToHsl, rgbToHsv, toHex, toHexLabel, type Hsva } from './color.js';
 
 	export type ColorOption = { name: string; css: string };
 	export type ColorChoice = { token: string; opacity?: number } | { custom: string };
@@ -77,6 +77,34 @@
 		};
 		el.addEventListener('pointermove', move);
 		el.addEventListener('pointerup', up);
+	}
+
+	// Input modes: hex, or three channels for RGB / HSL (written as hex either way).
+	let mode = $state<'hex' | 'rgb' | 'hsl'>('hex');
+	const channels = $derived(mode === 'rgb' ? rgb : rgbToHsl(...rgb));
+	const CHANNEL_MAX = { rgb: [255, 255, 255], hsl: [360, 100, 100] } as const;
+	function setChannel(index: number, raw: string) {
+		if (mode === 'hex') return;
+		const n = Math.round(Number(raw));
+		if (!Number.isFinite(n)) return;
+		const next = [...channels] as [number, number, number];
+		next[index] = Math.min(CHANNEL_MAX[mode][index], Math.max(0, n));
+		const [r, g, b] = mode === 'rgb' ? next : hslToRgb(...next);
+		hsva = { ...rgbToHsv(r, g, b), a: hsva.a };
+		hex = toHex([r, g, b]);
+		onchange({ custom: toHex([r, g, b], hsva.a) });
+	}
+
+	/** Chromium's eyedropper: picks a pixel anywhere on screen, the canvas included. */
+	const canPick = typeof window !== 'undefined' && 'EyeDropper' in window;
+	async function pick() {
+		try {
+			const result = await new (window as unknown as { EyeDropper: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper().open();
+			hex = result.sRGBHex;
+			applyHex();
+		} catch {
+			// cancelled (Esc)
+		}
 	}
 
 	function applyHex() {
@@ -176,9 +204,26 @@
 					<span class="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style="left:{hsva.a * 100}%"></span>
 				</div>
 				<form class="flex gap-1" onsubmit={(e) => { e.preventDefault(); applyHex(); }}>
-					<span class="size-7 shrink-0 rounded-[6px] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)]" style="background:{css}"></span>
-					<input class="h-7 min-w-0 flex-1 rounded-[6px] bg-control px-2 font-mono text-[11px] uppercase outline-none" bind:value={hex} aria-label="Hex" />
-					<span class="flex h-7 w-11 items-center justify-end text-[11px] text-label tabular-nums">{Math.round(hsva.a * 100)}%</span>
+					<select class="h-7 w-[52px] shrink-0 rounded-[6px] bg-control px-1 text-[11px] outline-none" bind:value={mode} aria-label={m.color_mode()}>
+						<option value="hex">Hex</option>
+						<option value="rgb">RGB</option>
+						<option value="hsl">HSL</option>
+					</select>
+					{#if mode === 'hex'}
+						<input class="h-7 min-w-0 flex-1 rounded-[6px] bg-control px-2 font-mono text-[11px] uppercase outline-none" bind:value={hex} onblur={applyHex} aria-label="Hex" />
+					{:else}
+						{#each channels as value, i (`${mode}${i}`)}
+							<input class="h-7 w-0 min-w-0 flex-1 rounded-[6px] bg-control px-1 text-center text-[11px] tabular-nums outline-none" {value}
+								aria-label={(mode === 'rgb' ? 'RGB' : 'HSL')[i]}
+								onchange={(e) => setChannel(i, (e.currentTarget as HTMLInputElement).value)} />
+						{/each}
+					{/if}
+					<span class="flex h-7 w-9 items-center justify-end text-[11px] text-label tabular-nums">{Math.round(hsva.a * 100)}%</span>
+					{#if canPick}
+						<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-label hover:bg-control" title={m.color_eyedropper()} aria-label={m.color_eyedropper()} onclick={pick}>
+							<Pipette class="size-3.5" />
+						</button>
+					{/if}
 				</form>
 			{/if}
 
