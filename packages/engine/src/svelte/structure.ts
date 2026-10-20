@@ -1,6 +1,6 @@
 import type MagicString from 'magic-string';
 import type { AST } from 'svelte/compiler';
-import { isElementLike, type ElementLike, type Located, type SvelteDoc } from './doc.js';
+import { SvelteDoc, isElementLike, type ElementLike, type Located } from './doc.js';
 
 export class EditError extends Error {}
 
@@ -22,6 +22,49 @@ export function setText(doc: SvelteDoc, s: MagicString, node: ElementLike, text:
 	const lead = current.match(/^\s*/)![0];
 	const trail = current.slice(lead.length).match(/\s*$/)![0];
 	const next = lead + escapeSvelteText(text) + (current.trim() ? trail : '');
+	if (start === end) s.appendLeft(start, next);
+	else s.overwrite(start, end, next);
+}
+
+/** Inline formatting a text layer may contain and still be edited visually (rich text). */
+export const INLINE_TAGS = new Set(['strong', 'b', 'em', 'i', 'u', 's', 'a', 'br', 'span', 'code', 'small', 'mark', 'sub', 'sup']);
+
+/** Text written in the markup with inline formatting only: no expressions, blocks, components, directives or dynamic attributes. */
+export function isStaticRich(nodes: AST.Fragment['nodes']): boolean {
+	return nodes.every(
+		(n) =>
+			n.type === 'Text' ||
+			(n.type === 'RegularElement' &&
+				INLINE_TAGS.has(n.name) &&
+				n.attributes.every((a) => a.type === 'Attribute' && (a.value === true || (Array.isArray(a.value) && a.value.every((part) => part.type === 'Text')))) &&
+				isStaticRich(n.fragment.nodes))
+	);
+}
+
+/**
+ * Replaces the content of a static text layer with rich text markup (text,
+ * bold, italic, links…), keeping the surrounding whitespace. The markup comes
+ * from the canvas, already escaped for Svelte; anything beyond static inline
+ * formatting is refused.
+ */
+export function setRichText(doc: SvelteDoc, s: MagicString, node: ElementLike, markup: string) {
+	if (!isStaticRich(node.fragment.nodes)) throw new EditError('This text is dynamic or contains other elements; edit it in code');
+	if (doc.isSelfClosing(node)) throw new EditError(`<${node.name}> can't contain text`);
+	let parsed: AST.Fragment['nodes'][number] | undefined;
+	try {
+		parsed = (new SvelteDoc(`<div>${markup}</div>`).ast as unknown as { fragment: AST.Fragment }).fragment.nodes[0];
+	} catch {
+		parsed = undefined;
+	}
+	if (parsed?.type !== 'RegularElement' || !isStaticRich(parsed.fragment.nodes)) {
+		throw new EditError('Rich text can only contain text, bold, italic, underline and links');
+	}
+	const start = doc.openTagEnd(node);
+	const end = doc.closeTagStart(node);
+	const current = doc.source.slice(start, end);
+	const lead = current.match(/^\s*/)![0];
+	const trail = current.slice(lead.length).match(/\s*$/)![0];
+	const next = lead + markup.trim() + (current.trim() ? trail : '');
 	if (start === end) s.appendLeft(start, next);
 	else s.overwrite(start, end, next);
 }

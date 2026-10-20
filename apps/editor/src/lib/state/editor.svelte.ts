@@ -901,7 +901,7 @@ class EditorState {
 		const loc = { ...info.loc, tag: info.tag };
 		// `<p>{user.name}</p>` renders plain text too: only text written in the markup can be typed over.
 		const source = await invoke('source:inspect', this.worktree, loc).catch(() => null);
-		if (source?.text == null) {
+		if (source?.text == null && !source?.richText) {
 			this.toast(m.text_dynamic());
 			return false;
 		}
@@ -916,14 +916,15 @@ class EditorState {
 		this.frames.get(this.textEditing.frameId)?.send({ type: 'end-edit-text', cancel });
 	}
 
-	async onTextEdited(frameId: string, id: NodeId, text: string, original: string, cancelled: boolean) {
+	/** `markup` is set for rich text (bold, italic, links…): it replaces the layer's content as Svelte markup. */
+	async onTextEdited(frameId: string, id: NodeId, text: string, original: string, cancelled: boolean, markup?: string) {
 		const editing = this.textEditing;
 		if (!editing || editing.frameId !== frameId || editing.id !== id) return;
 		this.textEditing = null;
 		// Give the keyboard back to the editor, or shortcuts would keep going to the frame.
 		if (document.activeElement?.tagName === 'WEBVIEW') (document.activeElement as HTMLElement).blur();
 		if (cancelled) return;
-		const ok = await this.edit(m.edit_text(), [{ type: 'text', target: editing.loc, text }]);
+		const ok = await this.edit(m.edit_text(), [markup === undefined ? { type: 'text', target: editing.loc, text } : { type: 'rich-text', target: editing.loc, markup }]);
 		if (!ok) this.frames.get(frameId)?.send({ type: 'set-text', id, text: original });
 	}
 

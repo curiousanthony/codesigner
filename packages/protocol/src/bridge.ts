@@ -187,7 +187,9 @@ export type HostToGuest =
 	/** Marks layers whose :hover / :active / :focus the host forces through DevTools ("none" clears). */
 	| { type: 'force-state'; ids: NodeId[]; state: 'none' | 'hover' | 'active' | 'focus' }
 	/** Puts text back after a refused edit (the frame shows what was typed until then). */
-	| { type: 'set-text'; id: NodeId; text: string };
+	| { type: 'set-text'; id: NodeId; text: string }
+	/** Answers `text-link-request`: links the selected text ("" removes the link, null just resumes typing). */
+	| { type: 'text-link'; href: string | null };
 
 export type GuestToHost =
 	| { type: 'ready'; url: string; title: string; svelteDev: boolean }
@@ -204,4 +206,7 @@ export type GuestToHost =
 	| { type: 'scrolled'; consumed: boolean; dx: number; dy: number }
 	| { type: 'key'; key: string; code: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }
 	| { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
-	| { type: 'text-edited'; id: NodeId; text: string; original: string; cancelled: boolean };
+	/** `markup` is set for rich text (inline bold, italic, links…): Svelte markup, already escaped. */
+	| { type: 'text-edited'; id: NodeId; text: string; original: string; cancelled: boolean; markup?: string }
+	/** ⌘K while typing: the host asks for a URL for the selected text (rect in guest px; href of the link it is in). */
+	| { type: 'text-link-request'; id: NodeId; href: string | null; rect: Rect };

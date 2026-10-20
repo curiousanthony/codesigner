@@ -23,7 +23,7 @@ import { SvelteDoc, type ElementLike, type Located } from './svelte/doc.js';
 import { ensureImport, resolveImport } from './svelte/imports.js';
 import { extractComponent, removeUnusedImports } from './svelte/extract.js';
 import { analyzeClass, editClasses, staticTokens } from './svelte/classes.js';
-import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, setText, unwrap, wrap } from './svelte/structure.js';
+import { EditError, duplicate, insert, insertionChildren, move, remove, renameTag, setAttribute, isStaticRich, setRichText, setText, unwrap, wrap } from './svelte/structure.js';
 import { TailwindEngine } from './tailwind.js';
 import { addVariantValue, editVariantClasses } from './svelte/variants.js';
 import { addColorToken, applyTokenEdit, parseTokens } from './tokens.js';
@@ -218,6 +218,9 @@ export class Workspace {
 				break;
 			case 'text':
 				setText(doc, s, this.locate(doc, op.target).node, op.text);
+				break;
+			case 'rich-text':
+				setRichText(doc, s, this.locate(doc, op.target).node, op.markup);
 				break;
 			case 'expose-prop':
 				exposeProp(doc, s, this.locate(doc, op.target).node, op.prop, op.from);
@@ -486,6 +489,7 @@ export class Workspace {
 			staticClasses: staticTokens(model),
 			dynamicClasses: model.dynamicParts,
 			text: onlyText ? textNodes.map((n) => n.data ?? '').join('').trim() : null,
+			richText: !onlyText && isStaticRich(node.fragment.nodes),
 			selfClosing: doc.isSelfClosing(node),
 			childCount: node.fragment.nodes.filter((n) => n.type !== 'Text' || (n as { data: string }).data.trim()).length
 		};

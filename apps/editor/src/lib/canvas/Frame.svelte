@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { Breakpoint, DropTarget, GuestToHost, NodeId, Rect } from '@codesigner/protocol';
 	import { Ellipsis, Play, Plus, RotateCw, TriangleAlert } from '@lucide/svelte';
 	import { editor, isDrawTool } from '#lib/state/editor.svelte.js';
@@ -103,7 +103,18 @@
 				client?.send({ type: 'request-tree' });
 				break;
 			case 'text-edited':
-				void editor.onTextEdited(frameId, message.id, message.text, message.original, message.cancelled);
+				linkRequest = null;
+				void editor.onTextEdited(frameId, message.id, message.text, message.original, message.cancelled, message.markup);
+				break;
+			case 'text-link-request':
+				linkRequest = { href: message.href, rect: message.rect };
+				linkValue = message.href ?? '';
+				// The page has the keyboard: take it for the URL field.
+				void tick().then(() => {
+					(document.activeElement as HTMLElement | null)?.blur();
+					linkInput?.focus();
+					linkInput?.select();
+				});
 				break;
 			case 'scrolled':
 				if (!message.consumed) {
@@ -188,6 +199,7 @@
 	let hoverSeq = 0;
 	let lastHit: NodeId[] = [];
 	async function onpointermove(event: PointerEvent) {
+		if (forwardToText(event, 'mouseMove')) return;
 		if (dragArm) return void dragMove(event);
 		if (drawing) {
 			const p = toGuest(event);
@@ -313,7 +325,42 @@
 		if (final) void moveLayer(frameId, final);
 	}
 
+	// ------------------------------------------------- typing in a text layer
+	/** While a text layer is typed in, the pointer inside it goes to the page, so words can be clicked and drag-selected. */
+	const editingRect = $derived(editor.textEditing?.frameId === frameId ? (selectedRects[editor.textEditing.id] ?? null) : null);
+	let textDrag = $state(false);
+	let textCursor = $state(false);
+	function forwardToText(event: PointerEvent, type: 'mouseDown' | 'mouseMove' | 'mouseUp'): boolean {
+		if (!editingRect || !webview) return false;
+		const { x, y } = toGuest(event);
+		const r = editingRect;
+		const inside = x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
+		if (type === 'mouseMove') textCursor = inside;
+		if (type === 'mouseDown' ? !inside || event.button !== 0 : !textDrag) return false;
+		if (type === 'mouseDown') {
+			textDrag = true;
+			gesture.setPointerCapture(event.pointerId);
+		}
+		if (type === 'mouseUp') textDrag = false;
+		webview.sendInputEvent({ type, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: Math.max(1, event.detail), ...(type === 'mouseMove' ? { modifiers: ['leftButtonDown'] } : {}) });
+		return true;
+	}
+
+	/** ⌘K while typing: the URL for the selected text. */
+	let linkRequest = $state<{ href: string | null; rect: Rect } | null>(null);
+	let linkValue = $state('');
+	let linkInput = $state<HTMLInputElement | null>(null);
+	$effect(() => {
+		if (!editor.textEditing) linkRequest = null;
+	});
+	function answerLink(href: string | null) {
+		linkRequest = null;
+		webview?.focus();
+		client?.send({ type: 'text-link', href });
+	}
+
 	function onpointerdown(event: PointerEvent) {
+		if (forwardToText(event, 'mouseDown')) return;
 		if (armDrag(event)) return;
 		if (!drawing || event.button !== 0) return;
 		event.preventDefault();
@@ -324,6 +371,7 @@
 	}
 
 	async function onpointerup(event: PointerEvent) {
+		if (forwardToText(event, 'mouseUp')) return;
 		if (dragArm) return void dragEnd(event);
 		if (!drawing || !drawStart || !client) return;
 		const start = drawStart;
@@ -741,7 +789,7 @@
 		<div
 			bind:this={gesture}
 			class="absolute inset-0 z-10"
-			style="pointer-events:{designMode || drawing || commenting || editor.draggingAsset ? 'auto' : 'none'}; cursor:{drawing || commenting ? 'crosshair' : designMode ? 'default' : 'auto'}"
+			style="pointer-events:{designMode || drawing || commenting || editor.draggingAsset ? 'auto' : 'none'}; cursor:{drawing || commenting ? 'crosshair' : textCursor && editingRect ? 'text' : designMode ? 'default' : 'auto'}"
 			role="presentation"
 			{ondragover}
 			{ondrop}
@@ -801,6 +849,21 @@
 					</div>
 				{/if}
 			{/each}
+			{#if linkRequest}
+				<form class="pointer-events-auto absolute z-10 flex w-[280px] items-center gap-1 rounded-popover bg-popover p-1.5 text-[12px] shadow-popover"
+					style="left:{linkRequest.rect.x}px; top:{linkRequest.rect.y + linkRequest.rect.height}px; transform: translateY(calc(6px * var(--inv))) scale(var(--inv)); transform-origin: top left;"
+					onsubmit={(e) => { e.preventDefault(); answerLink(linkValue.trim() || (linkRequest?.href ? '' : null)); }}>
+					<input bind:this={linkInput} class="h-7 min-w-0 flex-1 rounded-[6px] bg-control px-2 outline-none placeholder:text-muted" placeholder={m.text_link_placeholder()} bind:value={linkValue}
+						onkeydown={(e) => {
+							e.stopPropagation();
+							if (e.key === 'Escape') answerLink(null);
+						}} />
+					{#if linkRequest.href}
+						<button type="button" class="h-7 rounded-[6px] px-2 text-label hover:bg-control" onclick={() => answerLink('')}>{m.text_link_remove()}</button>
+					{/if}
+					<button type="submit" class="h-7 rounded-[6px] bg-accent px-2.5 text-white">{m.text_link_apply()}</button>
+				</form>
+			{/if}
 			{#if drafting && draftPoint}
 				<span class="absolute size-6 rounded-full rounded-bl-none bg-accent shadow-md"
 					style="left:{draftPoint.x}px; top:{draftPoint.y}px; transform: translateY(-100%) scale(var(--inv)); transform-origin: bottom left;"></span>

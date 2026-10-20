@@ -15,6 +15,8 @@ export type EditOp =
 			add: string[];
 	  }
 	| { type: 'text'; target: SourceLoc; text: string }
+	/** Rich text from the canvas: Svelte markup with only text and inline formatting (strong, em, a, br…). */
+	| { type: 'rich-text'; target: SourceLoc; markup: string }
 	| {
 			type: 'attribute';
 			target: SourceLoc;
@@ -137,6 +139,8 @@ export interface ElementSource {
 	dynamicClasses: string[];
 	/** Static text content when the element only contains text, else null. */
 	text: string | null;
+	/** The content is static text with inline formatting (bold, links…): editable as rich text. */
+	richText?: boolean;
 	selfClosing: boolean;
 	/** Number of direct element children. */
 	childCount: number;

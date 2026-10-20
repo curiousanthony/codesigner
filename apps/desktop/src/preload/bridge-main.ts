@@ -382,10 +382,7 @@ export function bridgeMain(config: BridgeConfig) {
 		// Frames written in the same file as the layer, before leaving it, tell us about {#each}.
 		const outer = layer?.kind === 'instance' ? frames.slice(layer.frameIndex + 1) : frames;
 		const inEach = !!layer && outer.some((f) => f.type === 'each' && f.file === layer.loc.file);
-		const onlyText =
-			layer?.kind === 'element' &&
-			el.children.length === 0 &&
-			Array.from(el.childNodes).every((n) => n.nodeType === Node.TEXT_NODE);
+		const onlyText = layer?.kind === 'element' && !/^(br|img|input|hr)$/.test(el.localName) && inlineOnly(el);
 		return {
 			id: rec?.id ?? idFor(el),
 			kind: layer?.kind ?? 'element',
@@ -421,6 +418,11 @@ export function bridgeMain(config: BridgeConfig) {
 			if (cur instanceof SVGElement && !(cur instanceof SVGSVGElement)) continue;
 			const layer = layerOf(cur);
 			if (!layer) continue;
+			// The bold word of a paragraph is part of the paragraph's text (still reachable in the Layers panel).
+			if (richBlock(cur)) {
+				chain.length = 0;
+				prevKey = null;
+			}
 			if (layer.key === prevKey) {
 				chain[chain.length - 1] = cur; // keep the outermost element of the layer
 			} else {
@@ -468,38 +470,155 @@ export function bridgeMain(config: BridgeConfig) {
 	};
 
 	// ------------------------------------------------------ text editing
-	let editing: { el: HTMLElement; id: NodeId; original: string } | null = null;
+	/** Inline formatting a text layer can hold and still be typed over (rich text). */
+	const INLINE = /^(strong|b|em|i|u|s|a|br|span|code|small|mark|sub|sup)$/;
+	/** Only text and inline formatting below `el`. */
+	const inlineOnly = (el: Element): boolean =>
+		Array.from(el.childNodes).every((n) => n.nodeType === Node.TEXT_NODE || (n instanceof HTMLElement && INLINE.test(n.localName) && inlineOnly(n)));
+	/** A paragraph whose own text runs around inline formatting: picked and edited as one text layer, like in Framer. */
+	const richBlock = (el: Element) =>
+		el.children.length > 0 && Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim()) && inlineOnly(el);
+
+	const escapeText = (text: string) =>
+		text.replace(/\u00a0/g, ' ').replace(/&(?=[#a-zA-Z0-9]+;)|[<{}]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '{': '&#123;', '}': '&#125;' })[ch]!);
+	const escapeAttr = (value: string) => value.replace(/[&"{}]/g, (ch) => ({ '&': '&amp;', '"': '&quot;', '{': '&#123;', '}': '&#125;' })[ch]!);
+	/** Attributes the canvas adds and the source never had. */
+	const OWN_ATTR = /^(contenteditable|spellcheck|data-codesigner-.*)$/;
+
+	/**
+	 * The edited content as Svelte markup. Elements that were there before the
+	 * edit keep their tag and attributes; the ones Chrome made while typing are
+	 * normalized (b → strong, i → em, styled spans unwrapped).
+	 */
+	const serialize = (root: Element, originals: WeakSet<Element>): string => {
+		const walk = (parent: Node): string =>
+			Array.from(parent.childNodes)
+				.map((n) => {
+					if (n.nodeType === Node.TEXT_NODE) return escapeText(n.textContent ?? '');
+					if (!(n instanceof HTMLElement)) return '';
+					let tag = n.localName;
+					const original = originals.has(n);
+					if (tag === 'br') return '<br />';
+					if (!INLINE.test(tag) || (!original && tag === 'span')) return walk(n);
+					if (!original) tag = tag === 'b' ? 'strong' : tag === 'i' ? 'em' : tag;
+					const inner = walk(n);
+					if (!inner && !original) return '';
+					const attrs = Array.from(n.attributes)
+						.filter((a) => !OWN_ATTR.test(a.name) && (original || a.name === 'href'))
+						.map((a) => {
+							const value = a.name === 'class' ? a.value.split(/\s+/).filter((c) => c && !/^svelte-/.test(c)).join(' ') : a.value;
+							return a.name === 'class' && !value ? '' : ` ${a.name}="${escapeAttr(value)}"`;
+						})
+						.join('');
+					return `<${tag}${attrs}>${inner}</${tag}>`;
+				})
+				.join('');
+		return walk(root).replace(/(<br \/>)+$/, '');
+	};
+
+	/** Puts back the exact nodes (and their attributes) a layer had, so the inline layers keep their source info. */
+	const keepNodes = (root: Element) => {
+		const elements = [root, ...Array.from(root.querySelectorAll('*'))];
+		const children = elements.map((e) => [e, Array.from(e.childNodes), Array.from(e.attributes).map((a) => [a.name, a.value])] as const);
+		const texts: [Text, string][] = [];
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+		for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push([n as Text, (n as Text).data]);
+		return () => {
+			for (const [e, kids, attrs] of children) {
+				e.replaceChildren(...kids);
+				if (e === root) continue;
+				for (const a of Array.from(e.attributes)) e.removeAttribute(a.name);
+				for (const [name, value] of attrs) e.setAttribute(name, value);
+			}
+			for (const [t, data] of texts) t.data = data;
+		};
+	};
+
+	let editing: {
+		el: HTMLElement;
+		id: NodeId;
+		original: string;
+		originals: WeakSet<Element>;
+		before: string;
+		rich: boolean;
+		restore: () => void;
+		/** The selection a link is being asked for (the host's URL field has the focus meanwhile). */
+		linking: Range | null;
+	} | null = null;
+	/** The last committed edit, to put back if the host refuses it. */
+	let lastEdit: { id: NodeId; restore: () => void } | null = null;
+
 	const finishEdit = (cancel: boolean) => {
 		if (!editing) return;
-		const { el, id, original } = editing;
+		const { el, id, original, originals, before, rich, restore } = editing;
 		editing = null;
 		el.removeEventListener('keydown', onEditKey, true);
 		el.removeEventListener('input', pushRects);
+		el.removeEventListener('paste', onEditPaste);
+		el.removeEventListener('blur', onEditBlur);
 		el.removeAttribute('contenteditable');
+		const markup = serialize(el, originals);
 		const text = (el.innerText ?? '').replace(/\n+$/, '');
-		if (cancel) el.textContent = original;
+		const unchanged = markup === before;
+		if (cancel) restore();
+		else lastEdit = { id, restore };
 		getSelection()?.removeAllRanges();
-		send({ type: 'text-edited', id, text: cancel ? original : text, original, cancelled: cancel || text === original });
+		const asRich = rich || /</.test(markup);
+		send({ type: 'text-edited', id, text: cancel ? original : text, original, cancelled: cancel || unchanged, ...(asRich ? { markup } : {}) });
+		if (cancel) send({ type: 'dom-changed', reason: 'mutation' });
 	};
+	function onEditBlur() {
+		// The host's link field took the focus: keep editing until it answers.
+		if (editing?.linking) return;
+		finishEdit(false);
+	}
+	function onEditPaste(event: ClipboardEvent) {
+		event.preventDefault();
+		document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') ?? '');
+	}
 	function onEditKey(event: KeyboardEvent) {
 		event.stopPropagation(); // keep the app's own shortcuts out of the way while typing
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			finishEdit(true);
-		} else if (event.key === 'Enter' && !event.shiftKey) {
+		} else if (event.key === 'Enter') {
 			event.preventDefault();
-			finishEdit(false);
+			if (event.shiftKey) document.execCommand('insertLineBreak');
+			else finishEdit(false);
+		} else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && editing) {
+			event.preventDefault();
+			const range = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0).cloneRange() : null;
+			if (!range || range.collapsed) return;
+			editing.linking = range;
+			const a = (range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement)?.closest('a');
+			const r = range.getBoundingClientRect();
+			send({ type: 'text-link-request', id: editing.id, href: a && editing.el.contains(a) ? a.getAttribute('href') : null, rect: { x: r.x, y: r.y, width: r.width, height: r.height } });
 		}
 	}
+	/** The host answered a link request: back to typing with the same selection, linked (or not). */
+	const applyLink = (href: string | null) => {
+		if (!editing?.linking) return;
+		const range = editing.linking;
+		editing.linking = null;
+		editing.el.focus();
+		getSelection()?.removeAllRanges();
+		getSelection()?.addRange(range);
+		if (href === '') document.execCommand('unlink');
+		else if (href) document.execCommand('createLink', false, href);
+		pushRects();
+	};
 	const startEdit = (id: NodeId) => {
 		finishEdit(false);
 		const el = (recFor(id)?.els[0] ?? elFor(id)) as HTMLElement | null;
 		if (!el) return;
-		editing = { el, id, original: el.textContent ?? '' };
-		el.setAttribute('contenteditable', 'plaintext-only');
+		const originals = new WeakSet(Array.from(el.querySelectorAll('*')));
+		editing = { el, id, original: el.textContent ?? '', originals, before: serialize(el, originals), rich: el.children.length > 0, restore: keepNodes(el), linking: null };
+		el.setAttribute('contenteditable', 'true');
+		document.execCommand('styleWithCSS', false, 'false');
 		el.addEventListener('keydown', onEditKey, true);
 		el.addEventListener('input', pushRects);
-		el.addEventListener('blur', () => finishEdit(false), { once: true });
+		el.addEventListener('paste', onEditPaste);
+		el.addEventListener('blur', onEditBlur);
 		el.focus();
 		const range = document.createRange();
 		range.selectNodeContents(el);
@@ -782,10 +901,18 @@ export function bridgeMain(config: BridgeConfig) {
 				if (msg.state !== 'none') for (const id of msg.ids) (recFor(id)?.els ?? []).forEach((el) => el.setAttribute('data-codesigner-force', msg.state));
 				break;
 			case 'set-text': {
+				if (lastEdit?.id === msg.id) {
+					lastEdit.restore();
+					lastEdit = null;
+					break;
+				}
 				const el = recFor(msg.id)?.els[0] ?? elFor(msg.id);
 				if (el) el.textContent = msg.text;
 				break;
 			}
+			case 'text-link':
+				applyLink(msg.href);
+				break;
 		}
 	});
 

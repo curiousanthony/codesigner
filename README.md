@@ -11,7 +11,8 @@ Designing in a separate prototype tool means re-implementing every design in cod
 ## What works today
 
 - **Your app on the canvas:** Desktop, Tablet and Phone frames, each a real browser view sharing one login session. Log in once and every frame and every branch stays logged in, even behind auth (Supabase, Lucia, Auth.js…).
-- **Framer-style selection:** click picks the top level, double-click drills in, ⌘-click goes straight to the innermost layer, Esc selects the parent. Component instances (e.g. `<Button>`) are selected as instances; repeated `{#each}` items show ×N.
+- **Framer-style selection:** click picks the innermost layer (its parents get a faint outline), ⌘-click picks the container, Esc selects the parent, double-click edits text or opens a component. Component instances (e.g. `<Button>`) are selected as instances; repeated `{#each}` items show ×N.
+- **Rich text:** double-click a text layer to type over it; ⌘B / ⌘I / ⌘U format the selected words and ⌘K links them. A paragraph with bold words is picked as one text layer.
 - **Layers, Pages, Assets:** all routes (route groups and `[slug]` routes with sample values), the layer tree of the current page, your `src/lib` components with their `tv()` variants, and your design tokens from `app.css`, editable for light and dark.
 - **Style panel:** Position, Size (Fixed / Fill / Fit / Relative / Viewport), Layout (Stack / Grid, direction, distribute, align, wrap, gap, padding), Styles (opacity, visibility, fill, overflow, radius, border), Text, and component props.
 - **Precise code edits:** only the affected bytes change (class tokens, attributes, text). Classes are validated and ordered with your project's own Tailwind design system, conflicting classes are removed, and the edit targets the responsive variant in effect at the frame's width.
